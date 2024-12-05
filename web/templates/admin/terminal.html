@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Terminal</title>
+    <!-- Include xterm.js and its CSS from a CDN -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+</head>
+<body>
+    <div id="terminal-container"></div>
+    <script>
+        const term = new Terminal();
+        term.open(document.getElementById('terminal-container'));
+    </script>
+</body>
+</html>
