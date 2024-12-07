@@ -3,4 +3,23 @@
 
 {%block content%}
 
+<section class="server-container">
+    <div class="left">
+        <h1>Available Hosts</h1>
+        <ul>
+            {% for host in hosts %}
+                <li>
+                    {{ host.name }} ({{ host.ip }}):
+                    <a href="{% url 'terminal-view' host_id=host.id %}">Connect</a>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="right">
+        <div id="terminal-container"></div>
+    </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+
 {%endblock%}

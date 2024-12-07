@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Login</title>
+
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WOLFx: IT Company</title>
+    <link rel="icon" type="image/x-icon"
+        href="{%if setting.favicon%}{{setting.favicon.url|default_if_none:''|default:''}}{%endif%}">
+    {%load static%}
+
+    {{setting.global_head|safe}}
+
+    {%if local_head%}
+    {{local_head.head|safe}}
+    {%endif%}
+
+    {%include 'web/dependencies.html'%}
+
+</head>
+
+<body>
+
+    <div class="login-container">
+        <video src="{%static 'web/video/bg-2.mp4'%}" autoplay muted loop></video>
+        <div class="login-form">
+            <h1>TETHER</h1>
+
+            <form method="post">
+                {% csrf_token %}
+                <table>
+                    {{ form.as_table }}
+                </table>
+                <button type="submit">Log In</button>
+            </form>
+        </div>
+    </div>
+
+</body>
+
+</html>

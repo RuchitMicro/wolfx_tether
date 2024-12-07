@@ -119,18 +119,6 @@ class GenericAdmin(ModelAdmin, ImportExportModelAdmin):
     import_form_class = ImportForm
     export_form_class = ExportForm
     
-    pn.extension('terminal')
-    
-    formfield_overrides = {
-        models.TextField: {
-            "widget": pn.widgets.Terminal(
-           "bash",
-           options={"cols": 80, "rows": 24},
-           sizing_mode="stretch_width"
-       ),
-        },
-    }
-    
     def __init__(self, model, admin_site):
         self.model = model
         self.inlines = []

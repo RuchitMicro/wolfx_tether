@@ -8,6 +8,7 @@ def site_settings(request):
         setting     =   SiteSetting.objects.all().first() if SiteSetting.objects.all().first() else None
         target_url  =   request.build_absolute_uri()
         local_head  =   Head.objects.get(target_url=target_url) if Head.objects.filter(target_url=target_url).exists() else None
+        hosts       =   Host.objects.all()
     except Exception as e:
         print('Exception in Context Processor.')
         print(e)
@@ -15,4 +16,5 @@ def site_settings(request):
     return {
         'setting'       : setting,
         'local_head'    : local_head,
+        'hosts'         : hosts,
     }

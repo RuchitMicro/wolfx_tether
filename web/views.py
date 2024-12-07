@@ -1,30 +1,60 @@
 from django.shortcuts           import redirect, render,get_object_or_404
-from django.views               import View     # Importing django class based view
-from django.views.generic       import CreateView, TemplateView, ListView, UpdateView, DetailView # Importing django generic class based view
+from django.views               import View                                                         # Importing django class based view
+from django.views.generic       import CreateView, TemplateView, ListView, UpdateView, DetailView   # Importing django generic class based view
 from django.http                import Http404
+
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.forms  import AuthenticationForm, UserCreationForm
+from django.contrib.auth.views  import LoginView, LogoutView
+from django.views.generic       import CreateView
+from django.urls                import reverse_lazy
+from django.contrib.auth        import login, authenticate
+from django.shortcuts           import redirect
 
 from web.models                 import *
 
 from django.shortcuts import render
-import panel as pn
 
-def terminal_view(request):
-    pn.extension('terminal')
 
-    terminal = pn.widgets.Terminal(
-        "bash",
-        options={"cols": 80, "rows": 24},
-        sizing_mode="stretch_width"
-    )
 
-    return pn.template.FastListTemplate(
-        site="My Django App",
-        title="Terminal",
-        main=[terminal]
-    ).server_doc(title="Terminal")
 
-class IndexView(TemplateView):
+class IndexView(LoginRequiredMixin, TemplateView):
     template_name = "web/index.html"
+    
+class LoginView(LoginView):
+    template_name               = 'web/auth/login.html'
+    authentication_form         = AuthenticationForm
+    redirect_authenticated_user = True
+
+class LogoutView(LogoutView):
+    template_name               = 'web/auth/logged_out.html'
+
+
+
+
+def host_list_view(request):
+    """
+    Display a list of hosts with a connect button.
+    The connect button leads to the terminal page passing host_id in the URL.
+    """
+    hosts = Host.objects.all()
+    return render(request, 'web/host_list.html', {'hosts': hosts})
+
+def terminal_view(request, host_id):
+    """
+    Display the terminal page with an xterm.js frontend.
+    This page will connect via WebSocket to the SSHConsumer.
+    """
+    host = Host.objects.get(pk=host_id)
+    return render(request, 'web/terminal.html', {'host_id': host_id, 'host': host})
+
+
+
+
+
+
+
+
 
 
 class BlogListView(ListView):

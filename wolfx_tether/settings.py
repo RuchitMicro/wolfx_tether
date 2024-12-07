@@ -32,7 +32,7 @@ ALLOWED_HOSTS = ['*']
 # Application definition
 
 INSTALLED_APPS = [
-        "unfold",                       # before django.contrib.admin
+    "unfold",                           # before django.contrib.admin
     "unfold.contrib.filters",           # optional, if special filters are needed
     "unfold.contrib.forms",             # optional, if special form elements are needed
     "unfold.contrib.import_export",     # optional, if django-import-export package is used
@@ -45,8 +45,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django_admin_shell',
     
+    'channels',
     'simple_history',
     'import_export',
     'tinymce',
@@ -66,6 +66,8 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'wolfx_tether.urls'
 
+LOGIN_REDIRECT_URL = 'admin'
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -77,12 +79,15 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'web.context_processor.site_settings',
             ],
         },
     },
 ]
 
 WSGI_APPLICATION = 'wolfx_tether.wsgi.application'
+
+ASGI_APPLICATION = 'wolfx_tether.asgi.application'
 
 
 # Database
@@ -95,6 +100,12 @@ DATABASES = {
     }
 }
 
+# Django Channels
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -164,7 +175,7 @@ UNFOLD = {
     "SHOW_HISTORY": True, # show/hide "History" button, default: True
     "SHOW_VIEW_ON_SITE": True, # show/hide "View on site" button, default: True
     # "ENVIRONMENT": "sample_app.environment_callback",
-    "DASHBOARD_CALLBACK": "web.views.dashboard_callback",
+    # "DASHBOARD_CALLBACK": "web.views.dashboard_callback",
     "THEME": "light", # Force theme: "dark" or "light". Will disable theme switcher
     # "LOGIN": {
     #     "image": lambda request: static("sample/login-bg.jpg"),
@@ -213,6 +224,11 @@ UNFOLD = {
                     "link": reverse_lazy("admin:index"),
                 },
                 {
+                    "title": ("Host"),
+                    "icon": "dns",  
+                    "link": reverse_lazy("admin:web_host_changelist"),
+                },
+                {
                     "title": ("SiteSetting"),
                     "icon": "settings",  
                     "link": reverse_lazy("admin:web_sitesetting_changelist"),
@@ -257,4 +273,3 @@ UNFOLD = {
         },]
     }
 }
-

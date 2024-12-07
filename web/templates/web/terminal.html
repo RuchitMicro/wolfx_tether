@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>SSH Terminal</title>
+
+    {% load static %}
+
+    <!-- Include xterm.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
+
+    <link rel="stylesheet" href="{%static 'web/css/main.css'%}">
+    <link rel="stylesheet" href="{%static 'web/css/style.css'%}">
+
+</head>
+
+<body>
+    <div id="status-bar" class="status-bar">
+        Status: <span id="status">Disconnected</span>
+    </div>
+
+    <div id="terminal"></div>
+
+    <div id="buttons" class="terminal-buttons">
+        <button id="connect_btn">
+            <div class="icon-container">
+                <img src="{%static 'web/img/connect.svg'%}" alt="">
+            </div>
+            <span>
+                Connect
+            </span>
+        </button>
+        <button id="kill_btn" disabled>
+            <div class="icon-container">
+                <img src="{%static 'web/img/kill.svg'%}" alt="">
+            </div>
+            Kill
+        </button>
+    </div>
+
+    <!-- Host Data Table -->
+    <div class="host-data">
+        <h2>Host Details: {{host.name}}</h2>
+        <table class="host-table">
+            <tbody>
+                <tr>
+                    <td data-label="Field">Name</td>
+                    <td data-label="Value">{{ host.name }}</td>
+                </tr>
+                <tr>
+                    <td data-label="Field">IP Address</td>
+                    <td data-label="Value">{{ host.ip }}</td>
+                </tr>
+                <tr>
+                    <td data-label="Field">Port</td>
+                    <td data-label="Value">{{ host.port }}</td>
+                </tr>
+                <tr>
+                    <td data-label="Field">Username</td>
+                    <td data-label="Value">{{ host.username }}</td>
+                </tr>
+               
+                <tr>
+                    <td data-label="Field">Description</td>
+                    <td data-label="Value">{{ host.description|default:"N/A" }}</td>
+                </tr>
+                <tr>
+                    <td data-label="Field">Connect Script</td>
+                    <td data-label="Value">
+                        {% if host.connect_script %}
+                            <pre>{{ host.connect_script }}</pre>
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+
+
+    
+</body>
+
+<!-- Include xterm.js and its addon dependencies -->
+<script src="https://unpkg.com/xterm/lib/xterm.js"></script>
+<script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+
+<script>
+    // Initialize terminal
+    const term = new Terminal({
+        cursorBlink: true,
+        fontSize: 14,
+        rows: 30,
+        cols: 100,
+        scrollback: 10000, // Increase scrollback buffer
+        cursorStyle: 'underline', // Other options: 'block', 'bar'
+        theme: {
+            background: '#1e1e1e', // Dark background
+            foreground: '#ffffff', // White text
+            cursor: '#ffffff',
+            selection: '#44475a',
+            black: '#000000',
+            red: '#ff5555',
+            green: '#50fa7b',
+            yellow: '#f1fa8c',
+            blue: '#bd93f9',
+            magenta: '#ff79c6',
+            cyan: '#8be9fd',
+            white: '#f8f8f2',
+            brightBlack: '#6272a4',
+            brightRed: '#ff6e6e',
+            brightGreen: '#69ff94',
+            brightYellow: '#ffffa5',
+            brightBlue: '#d6acff',
+            brightMagenta: '#ff92df',
+            brightCyan: '#a4ffff',
+            brightWhite: '#ffffff',
+        },
+    });
+
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(document.getElementById('terminal'));
+    fitAddon.fit();
+
+    window.addEventListener('resize', () => {
+        fitAddon.fit();
+    });
+
+    
+    let socket = null;
+
+    const TETHER_ASCII_ART = ``
+
+
+    // Function to write ASCII art
+    function writeAsciiArt() {
+        term.writeln(TETHER_ASCII_ART);
+        term.writeln("TETHER by WOLFX!\r\n");
+    }
+
+    // Connect button creates WebSocket connection
+    document.getElementById('connect_btn').addEventListener('click', function () {
+        // Dynamically get host_id from Django context
+        const host_id = "{{ host_id }}"; // Ensure this is passed in the view context
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+        const wsUrl = `${wsProtocol}127.0.0.1:8080/ws/ssh/${host_id}/`;
+        // const wsUrl = `${wsProtocol}${window.location.host}/ws/ssh/${host_id}/`;
+        
+        const statusSpan = document.getElementById('status');
+
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = function () {
+
+            writeAsciiArt(); // Inject ASCII art upon connection
+            term.write("Connection established.\r\n");
+            // Now that connection is open, we can start sending keystrokes
+            document.getElementById('kill_btn').disabled = false; // Enable Kill button
+            statusSpan.textContent = "Connected";
+            statusSpan.style.color = "green";
+        };
+
+        socket.onmessage = function (event) {
+            // Data from server is appended to terminal
+            term.write(event.data);
+        };
+
+        socket.onclose = function (event) {
+            term.write("\r\nConnection closed.\r\n");
+            document.getElementById('kill_btn').disabled = true; // Disable Kill button
+            statusSpan.textContent = "Disconnected";
+            statusSpan.style.color = "grey";
+        };
+
+        socket.onerror = function (error) {
+            term.write(`\r\nError: ${error.message}\r\n`);
+            statusSpan.textContent = "Error";
+            statusSpan.style.color = "red";
+        };
+
+        // When user types, send data to server as JSON
+        term.onData((data) => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                const message = JSON.stringify({ type: 'input', data: data });
+                socket.send(message);
+            }
+        });
+    });
+
+    // Kill button sends kill signal to server
+    document.getElementById('kill_btn').addEventListener('click', function () {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'kill' }));
+        }
+    });
+
+
+    // Optional: Handle socket closure from server side
+    function closeSocket() {
+        if (socket) {
+            socket.close();
+        }
+    }
+
+    window.addEventListener('beforeunload', closeSocket);
+</script>
+</html>

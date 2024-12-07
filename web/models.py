@@ -254,6 +254,21 @@ class Contact(CommonModel):
         )
 
 
+# Hosts
+class Host(CommonModel):
+    name            =       models.CharField                (max_length = 300, help_text="Enter a unique name for the host.")
+    ip              =       models.GenericIPAddressField    (help_text = "Enter the IPv4 or IPv6 address of the host.")
+    port            =       models.IntegerField             (default = 22, help_text="Specify the port number for SSH connections (default is 22).")
+    username        =       models.CharField                (max_length = 300, help_text="Enter the username for authenticating with the host.")
+    password        =       models.CharField                (max_length = 300, blank=True,null=True, help_text="Enter the password for authentication. Leave blank if using a PEM file.")
+    pem_file        =       models.FileField                (upload_to = 'pem_file/', blank=True,null=True, help_text="Upload a PEM file for key-based authentication. Leave blank if using a password.")
+    description     =       models.TextField                (blank = True,null=True, help_text="Provide a brief description or notes about the host.")
+    connect_script  =       models.TextField                (blank = True,null=True, help_text=("Custom connect script to run. CAUTION: This script overrides the default connection script. Ensure that the script is secure and functions correctly."))
+
+    admin_meta = {
+        'list_display': ['name', 'ip', 'port', 'username', 'created_at', 'updated_at'],
+    }
+
 
 
 # Blog Models
