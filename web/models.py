@@ -6,6 +6,8 @@ from django.contrib.auth.models         import User
 from django.db.models                   import Avg
 from django.core.exceptions             import ValidationError
 from django.core.serializers            import serialize
+from django.conf                        import settings
+from django.db.models.signals           import pre_save
 
 # Timezone
 from django.utils   import timezone
@@ -52,6 +54,10 @@ from model_utils.fields import MonitorField, StatusField
 # TinyMCE
 from tinymce.models                 import HTMLField
 
+# Encryption
+import base64
+import hashlib
+from cryptography.fernet import Fernet
 
 
 
@@ -263,13 +269,92 @@ class Host(CommonModel):
     password        =       models.CharField                (max_length = 300, blank=True,null=True, help_text="Enter the password for authentication. Leave blank if using a PEM file.")
     pem_file        =       models.FileField                (upload_to = 'pem_file/', blank=True,null=True, help_text="Upload a PEM file for key-based authentication. Leave blank if using a password.")
     description     =       models.TextField                (blank = True,null=True, help_text="Provide a brief description or notes about the host.")
-    connect_script  =       models.TextField                (blank = True,null=True, help_text=("Custom connect script to run. CAUTION: This script overrides the default connection script. Ensure that the script is secure and functions correctly."))
 
     admin_meta = {
         'list_display': ['name', 'ip', 'port', 'username', 'created_at', 'updated_at'],
     }
 
+    def __str__(self):
+        return str(self.name)+": "+ str(self.ip)
 
+
+    @staticmethod
+    def _get_fernet_key():
+        """
+        Derive a 32-byte Fernet key from the Django SECRET_KEY.  
+        This method:
+        - Takes the Django SECRET_KEY (a string).
+        - Uses SHA256 to hash it.
+        - Base64 urlsafe encodes the hash digest to get a 32-byte key suitable for Fernet.
+
+        This ensures that even if SECRET_KEY isn't exactly 32 bytes, 
+        we still get a proper Fernet key.
+        """
+        secret      = settings.SECRET_KEY.encode('utf-8')
+        sha         = hashlib.sha256(secret).digest()
+        fernet_key  = base64.urlsafe_b64encode(sha)
+        return fernet_key
+
+    @staticmethod
+    def encrypt_password(plain_text_password):
+        """
+        Encrypt the given plain text password using Fernet symmetric encryption.
+        Returns the encrypted password as a bytes-like object base64 encoded 
+        so it can be safely stored in the database as a string.
+
+        If the plain_text_password is None or empty, return it as is.
+        """
+        if not plain_text_password:
+            return plain_text_password
+        fernet_key  = Host._get_fernet_key()
+        f           = Fernet(fernet_key)
+        encrypted = f.encrypt(plain_text_password.encode('utf-8'))
+        # Convert to a standard string to store in DB
+        return encrypted.decode('utf-8')
+
+    @staticmethod
+    def decrypt_password(encrypted_password):
+        """
+        Decrypt the given encrypted password using Fernet symmetric decryption.
+        Returns the original plain text password.
+
+        If encrypted_password is None or empty, return it as is.
+        If any error occurs during decryption (e.g. invalid token), 
+        return an empty string to avoid throwing exceptions at runtime.
+        """
+        if not encrypted_password:
+            return encrypted_password
+        try:
+            fernet_key  = Host._get_fernet_key()
+            f           = Fernet(fernet_key)
+            decrypted   = f.decrypt(encrypted_password.encode('utf-8'))
+            return decrypted.decode('utf-8')
+        except Exception:
+            # If there's any issue with decryption, return empty string
+            return ""
+
+# Signal to ensure password is always encrypted before saving
+@receiver(pre_save, sender=Host)
+def encrypt_host_password_before_save(sender, instance, **kwargs):
+    """
+    This signal ensures that whenever a Host is saved, 
+    its password field is stored in encrypted form.
+
+    Steps:
+    - If instance.password is not empty and is not already encrypted by Fernet, 
+      encrypt it here. We do a naive check by trying to decrypt it; 
+      if we succeed (which would mean it's already encrypted), we skip re-encryption.
+      If it fails, we proceed with encryption. This prevents double encryption.
+    """
+    if instance.password:
+        # Attempt to decrypt to check if it's already encrypted.
+        # If this returns empty string (error) or doesn't match original password pattern, 
+        # we assume it's not yet encrypted.
+        test_decrypt = Host.decrypt_password(instance.password)
+        if test_decrypt == "":
+            # It's likely not encrypted yet, so encrypt now.
+            instance.password = Host.encrypt_password(instance.password)
+        # If test_decrypt != "", then it's already encrypted and we do nothing.
 
 # Blog Models
 class BlogCategory(CommonModel):

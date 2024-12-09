@@ -36,7 +36,7 @@ INSTALLED_APPS = [
     "unfold.contrib.filters",           # optional, if special filters are needed
     "unfold.contrib.forms",             # optional, if special form elements are needed
     "unfold.contrib.import_export",     # optional, if django-import-export package is used
-    # "unfold.contrib.guardian",         # optional, if django-guardian package is used
+    "unfold.contrib.guardian",          # optional, if django-guardian package is used
     "unfold.contrib.simple_history",    # optional, if django-simple-history package is used
     
     'django.contrib.admin',
@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     
+    'guardian',
     'channels',
     'simple_history',
     'import_export',
@@ -106,6 +107,12 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels.layers.InMemoryChannelLayer",
     },
 }
+
+# Django Guardian
+AUTHENTICATION_BACKENDS = (
+    'django.contrib.auth.backends.ModelBackend', # this is default
+    'guardian.backends.ObjectPermissionBackend',
+)
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators

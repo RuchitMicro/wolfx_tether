@@ -132,4 +132,29 @@ button {
 .host-data table tr td:first-child {
   font-weight: bold;
   padding-right: 20px;
+}
+
+.server-container {
+  background-color: black;
+  color: white;
+  height: 100vh;
+  padding: 20px;
+}
+.server-container h1 {
+  margin: 0;
+  font-family: "Oxanium", sans-serif !important;
+}
+.server-container table {
+  padding: 10px 0px;
+}
+.server-container table td {
+  padding: 10px 0px;
+}
+.server-container table td a {
+  color: white;
+  border: 2px solid green;
+  padding: 7px 10px;
+}
+.server-container table summary {
+  cursor: pointer;
 }/*# sourceMappingURL=style.css.map */

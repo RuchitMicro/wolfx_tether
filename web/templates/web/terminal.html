@@ -65,16 +65,6 @@
                     <td data-label="Field">Description</td>
                     <td data-label="Value">{{ host.description|default:"N/A" }}</td>
                 </tr>
-                <tr>
-                    <td data-label="Field">Connect Script</td>
-                    <td data-label="Value">
-                        {% if host.connect_script %}
-                            <pre>{{ host.connect_script }}</pre>
-                        {% else %}
-                            N/A
-                        {% endif %}
-                    </td>
-                </tr>
             </tbody>
         </table>
     </div>

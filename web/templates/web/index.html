@@ -5,15 +5,54 @@
 
 <section class="server-container">
     <div class="left">
-        <h1>Available Hosts</h1>
-        <ul>
+        <h1>Available Hosts.</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th width="2%"></th>
+                    <th width="20%">Name</th>
+                    <th width="40%">IP Address</th>
+                    <th width="18%">Port</th>
+                    <th width="20%">Username</th>
+                    <th width="0%"></th>
+                </tr>
+            </thead>
+            <tbody>
             {% for host in hosts %}
-                <li>
-                    {{ host.name }} ({{ host.ip }}):
-                    <a href="{% url 'terminal-view' host_id=host.id %}">Connect</a>
-                </li>
+                <tr>
+                    <td>
+                        {{ forloop.counter }}.
+                    </td>
+                    <td>
+                        {%if host.description%}
+                        <details>
+                            <summary>{{ host.name }}</summary>
+                            <p style="font-size: 12px;">
+                                {{ host.description|default:"N/A" }}
+                            </p>
+                        </details>
+                        {%else%}
+                            {{ host.name }}
+                        {%endif%}
+
+                    </td>
+                    <td>
+                        {{ host.ip }}
+                    </td>
+                    <td>
+                        {{ host.port }}
+                    </td>
+                    <td>
+                        {{ host.username }}
+                    </td>
+                    <td>
+                        <a href="{% url 'terminal-view' host_id=host.id %}" target="_blank">Connect</a>
+                    </td>
+                </tr>
             {% endfor %}
-        </ul>
+
+            </tbody>
+        </table>
     </div>
     <div class="right">
         <div id="terminal-container"></div>

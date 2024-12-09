@@ -14,7 +14,10 @@ from import_export.admin                import ImportExportModelAdmin
 from unfold.contrib.import_export.forms import ExportForm, ImportForm
 from django.utils.translation           import gettext_lazy as _
 
-import panel as pn
+# Django Guardian
+from guardian.admin import GuardedModelAdmin
+
+
 
 # Common Model
 try:
@@ -115,7 +118,7 @@ class GenericStackedAdmin(TabularInline):
         return formset
 
 
-class GenericAdmin(ModelAdmin, ImportExportModelAdmin):
+class GenericAdmin(GuardedModelAdmin, ModelAdmin, ImportExportModelAdmin):
     import_form_class = ImportForm
     export_form_class = ExportForm
     
@@ -255,10 +258,12 @@ class GenericAdmin(ModelAdmin, ImportExportModelAdmin):
         js = ('https://code.jquery.com/jquery-3.7.0.js', )
 
 
+
 app = apps.get_app_config(global_app_name)
 for model_name, model in app.models.items():
     # If model_name consists history
     if model_name not in exempt and 'histor' not in model_name.lower():
         # print(model_name + ' '  + str(model))
+        # admin.site.register(model, GenericAdmin)
         admin.site.register(model, GenericAdmin)
     

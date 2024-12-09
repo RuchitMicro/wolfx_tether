@@ -36,34 +36,51 @@ class SSHConsumer(AsyncWebsocketConsumer):
     keep_running = True
 
     async def connect(self):
+        """
+        Overridden connect method that ensures:
+        - The user is authenticated.
+        - The user has 'view_host' permission on the requested host.
+        If these conditions are not met, the connection is refused.
+        """
         # Extract host_id from self.scope['url_route']['kwargs']
         host_id = self.scope['url_route']['kwargs'].get('host_id')
         if not host_id:
+            # If no host_id provided, close the connection immediately.
             await self.close()
             return
 
-        # Accept WebSocket connection
+        # Check if the user is authenticated.
+        # If not authenticated, we refuse the WebSocket connection.
+        if not self.scope['user'].is_authenticated:
+            await self.close()
+            return
+
+        # Accept the WebSocket connection tentatively (we will still validate permissions).
+        # We accept early so we can send error messages to the client before closing if needed.
         await self.accept()
 
-        # Get Host object
-        host = None
+        # Attempt to fetch the host. If it fails, close the connection.
         try:
             host = await self.get_host(host_id)
         except Exception as e:
-            # If we can't get the host, close connection and send error
             await self.send_text_to_client("Error: Unable to fetch host.")
             await self.close()
             return
 
-        # Attempt SSH connection
+        # Check if the authenticated user has the 'view_host' permission on this specific host
+        if not self.scope['user'].has_perm('view_host', host):
+            # If the user does not have the required permission, inform and close.
+            await self.send_text_to_client("Error: You do not have permission to access this host.")
+            await self.close()
+            return
+
+        # If we reach this point, the user is authenticated and has permission to view the host.
+        # Proceed with establishing the SSH connection.
         try:
-            # Paramiko SSH setup
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-            # Connect using password or pem file depending on availability
             if host.pem_file:
-                # Use key-based authentication
                 pkey = paramiko.RSAKey.from_private_key_file(host.pem_file.path)
                 self.ssh_client.connect(
                     hostname=host.ip,
@@ -73,20 +90,18 @@ class SSHConsumer(AsyncWebsocketConsumer):
                     timeout=10
                 )
             else:
-                # Use password-based authentication
+                decrypted_password = host.decrypt_password(host.password)
                 self.ssh_client.connect(
                     hostname=host.ip,
                     port=host.port,
                     username=host.username,
-                    password=host.password,
+                    password=decrypted_password,
                     timeout=10
                 )
 
-            # Open an interactive shell
             self.ssh_channel = self.ssh_client.invoke_shell(term='xterm')
             self.ssh_channel.settimeout(0.0)
 
-            # Launch a separate thread to read output from the SSH session
             self.keep_running = True
             self.output_thread = threading.Thread(target=self.read_ssh_output, daemon=True)
             self.output_thread.start()
@@ -98,7 +113,7 @@ class SSHConsumer(AsyncWebsocketConsumer):
             logger.error(f"SSH connection failed for host_id {host_id}: {str(e)}")
             await self.close()
             return
-
+        
     async def disconnect(self, close_code):
         # Close SSH connection and channel on disconnect
         self.keep_running = False

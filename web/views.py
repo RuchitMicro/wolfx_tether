@@ -3,13 +3,13 @@ from django.views               import View                                     
 from django.views.generic       import CreateView, TemplateView, ListView, UpdateView, DetailView   # Importing django generic class based view
 from django.http                import Http404
 
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.forms  import AuthenticationForm, UserCreationForm
-from django.contrib.auth.views  import LoginView, LogoutView
-from django.views.generic       import CreateView
-from django.urls                import reverse_lazy
-from django.contrib.auth        import login, authenticate
-from django.shortcuts           import redirect
+from django.contrib.auth.mixins     import LoginRequiredMixin
+from django.contrib.auth.forms      import AuthenticationForm, UserCreationForm
+from django.contrib.auth.views      import LoginView, LogoutView
+from django.views.generic           import CreateView
+from django.urls                    import reverse_lazy
+from django.contrib.auth            import login, authenticate
+from django.contrib.auth.decorators import login_required
 
 from web.models                 import *
 
@@ -17,10 +17,19 @@ from django.shortcuts import render
 
 
 
-
 class IndexView(LoginRequiredMixin, TemplateView):
     template_name = "web/index.html"
     
+    def get(self, request, *args, **kwargs):
+        # Fetch all hosts
+        all_hosts = Host.objects.all()
+        # Filter hosts by checking if the user has 'view_host' permission on each
+        # This ensures only permitted hosts are displayed to the logged-in user.
+        permitted_hosts = [h for h in all_hosts if request.user.has_perm('view_host', h)]
+
+        return render(request, 'web/index.html', {'hosts': permitted_hosts})
+
+
 class LoginView(LoginView):
     template_name               = 'web/auth/login.html'
     authentication_form         = AuthenticationForm
@@ -32,22 +41,22 @@ class LogoutView(LogoutView):
 
 
 
-def host_list_view(request):
-    """
-    Display a list of hosts with a connect button.
-    The connect button leads to the terminal page passing host_id in the URL.
-    """
-    hosts = Host.objects.all()
-    return render(request, 'web/host_list.html', {'hosts': hosts})
-
+@login_required
 def terminal_view(request, host_id):
     """
-    Display the terminal page with an xterm.js frontend.
-    This page will connect via WebSocket to the SSHConsumer.
+    Display the terminal page for a given host.
+    Only allow this view if the user is logged in and has the 'view_host' permission
+    on that specific host instance.
     """
-    host = Host.objects.get(pk=host_id)
-    return render(request, 'web/terminal.html', {'host_id': host_id, 'host': host})
+    host = get_object_or_404(Host, pk=host_id)
 
+    # Check if the current logged-in user has 'view_host' permission on this host
+    if not request.user.has_perm('view_host', host):
+        # If not permitted, return a 403 response
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden("You do not have the required permission to view this host.")
+
+    return render(request, 'web/terminal.html', {'host_id': host_id, 'host': host})
 
 
 
