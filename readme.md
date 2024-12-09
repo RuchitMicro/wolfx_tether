@@ -6,7 +6,6 @@ Tether is a solution for deployment engineers, site reliability engineers, and i
 ## 🚀 What is Tether?
 
 Imagine you’re on the go, or maybe using a device without a terminal at hand. Tether lets you jump into a secure SSH session straight from your web browser. It leverages Django and Channels to provide real-time, bi-directional communication with remote hosts—like a browser-based terminal on steroids! 
-Tether transforms your browser into a dynamic SSH terminal, eliminating the need for a local shell or complicated SSH setups. It leverages Django and Channels to deliver responsive, real-time connections to remote hosts. With Tether, you’re always just one click away from a fully interactive session—no extra software required.
 
 
 ## 💡 Why Tether is created?
