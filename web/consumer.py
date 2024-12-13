@@ -1,4 +1,3 @@
-# web/consumer.py
 import json
 import paramiko
 import threading
@@ -14,68 +13,50 @@ logger = logging.getLogger(__name__)
 
 class SSHConsumer(AsyncWebsocketConsumer):
     """
-    SSHConsumer is responsible for handling a WebSocket that proxies
-    a remote SSH session. This allows a browser terminal (xterm.js) to
-    interactively communicate with a remote host over SSH.
+    Opinionated approach:
+    This consumer no longer enforces a permission check for the host. 
+    Instead, it only checks if the user is authenticated.
+    If authenticated, it proceeds to connect to the host. 
+    If not authenticated, it sends an error to the client and closes the connection.
 
-    This consumer:
-    - On connect: retrieves the Host data, sets up SSH connection, and opens a shell.
-    - On receive: sends incoming data from client to the SSH shell input or handles control commands.
-    - On disconnect: closes the SSH connection.
-
-    Run paramiko in a separate thread to avoid blocking the event loop.
-
-    Always handle exceptions gracefully and send an appropriate message
-    back to the user if something fails.
+    If the host does not exist or SSH fails, it gracefully notifies the client.
     """
 
-    # Store references to SSH session components
     ssh_client = None
     ssh_channel = None
     output_thread = None
     keep_running = True
 
     async def connect(self):
-        """
-        Overridden connect method that ensures:
-        - The user is authenticated.
-        - The user has 'view_host' permission on the requested host.
-        If these conditions are not met, the connection is refused.
-        """
-        # Extract host_id from self.scope['url_route']['kwargs']
+        # Extract host_id from URL kwargs
         host_id = self.scope['url_route']['kwargs'].get('host_id')
         if not host_id:
-            # If no host_id provided, close the connection immediately.
+            # No host_id means we cannot proceed
+            await self.accept()
+            await self.send_text_to_client("Error: No host ID specified.")
             await self.close()
             return
 
-        # Check if the user is authenticated.
-        # If not authenticated, we refuse the WebSocket connection.
+        # Check if user is authenticated
         if not self.scope['user'].is_authenticated:
+            # Inform the user and close
+            await self.accept()
+            await self.send_text_to_client("Error: You must be authenticated to access this host.")
             await self.close()
             return
 
-        # Accept the WebSocket connection tentatively (we will still validate permissions).
-        # We accept early so we can send error messages to the client before closing if needed.
+        # Accept the connection now that authentication passed
         await self.accept()
 
-        # Attempt to fetch the host. If it fails, close the connection.
+        # Fetch the host object
         try:
             host = await self.get_host(host_id)
         except Exception as e:
-            await self.send_text_to_client("Error: Unable to fetch host.")
+            await self.send_text_to_client("Error: Unable to fetch host details.")
             await self.close()
             return
 
-        # Check if the authenticated user has the 'view_host' permission on this specific host
-        if not self.scope['user'].has_perm('view_host', host):
-            # If the user does not have the required permission, inform and close.
-            await self.send_text_to_client("Error: You do not have permission to access this host.")
-            await self.close()
-            return
-
-        # If we reach this point, the user is authenticated and has permission to view the host.
-        # Proceed with establishing the SSH connection.
+        # Attempt SSH connection
         try:
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -112,10 +93,8 @@ class SSHConsumer(AsyncWebsocketConsumer):
             await self.send_text_to_client(f"Error: Unable to establish SSH connection. {str(e)}")
             logger.error(f"SSH connection failed for host_id {host_id}: {str(e)}")
             await self.close()
-            return
-        
+
     async def disconnect(self, close_code):
-        # Close SSH connection and channel on disconnect
         self.keep_running = False
         if self.ssh_channel is not None:
             self.ssh_channel.close()
@@ -124,10 +103,6 @@ class SSHConsumer(AsyncWebsocketConsumer):
         logger.info(f"SSH connection closed for user {self.scope['user']} with close_code {close_code}")
 
     async def receive(self, text_data=None, bytes_data=None):
-        """
-        Handle incoming WebSocket messages. Expect JSON messages to distinguish
-        between regular input and control commands like 'kill'.
-        """
         if text_data:
             try:
                 message = json.loads(text_data)
@@ -140,12 +115,10 @@ class SSHConsumer(AsyncWebsocketConsumer):
                         except Exception as e:
                             await self.send_text_to_client(f"\r\nError writing to SSH channel: {str(e)}\r\n")
                 elif msg_type == 'kill':
-                    # Handle kill command
                     await self.kill_ssh_connection()
                 else:
                     await self.send_text_to_client("Error: Unknown message type.")
             except json.JSONDecodeError:
-                # If message is not JSON, treat it as raw input
                 if self.ssh_channel is not None:
                     try:
                         self.ssh_channel.send(text_data)
@@ -154,11 +127,8 @@ class SSHConsumer(AsyncWebsocketConsumer):
 
     def read_ssh_output(self):
         """
-        This runs in a separate thread. We continually read from the SSH channel
-        and send data back over the WebSocket. Since we cannot use async here,
-        we use async_to_sync for sending data to the client.
-
-        We read small chunks of data and send them back to the client as soon as they arrive.
+        Runs in a separate thread. Continuously reads from SSH channel and
+        sends the output to the client in near real-time.
         """
         while self.keep_running and self.ssh_channel is not None and not self.ssh_channel.closed:
             try:
@@ -173,24 +143,18 @@ class SSHConsumer(AsyncWebsocketConsumer):
 
     @staticmethod
     async def get_host(host_id):
-        """
-        Fetch the Host object asynchronously. Adjust if you're using an async ORM or not.
-        If using Django’s default ORM (synchronous), run in thread executor or just get it.
-        """
-        # Using standard Django ORM call (synchronous)
-        # If you're using async consumers, either run_in_executor or 
-        # accept that this is a blocking call. For simplicity, we just do it directly.
-        # In a real production system, do it with sync_to_async:
         from asgiref.sync import sync_to_async
         return await sync_to_async(get_object_or_404)(Host, id=host_id)
 
     async def send_text_to_client(self, message):
-        """Send a text message to the connected WebSocket client."""
+        """
+        Send plain text messages back to the WebSocket client.
+        """
         await self.send(text_data=message)
 
     async def kill_ssh_connection(self):
         """
-        Handle the kill command by closing the SSH connection and the WebSocket.
+        Close the SSH connection and notify the client that the session ended.
         """
         self.keep_running = False
         if self.ssh_channel is not None:
@@ -199,4 +163,4 @@ class SSHConsumer(AsyncWebsocketConsumer):
             self.ssh_client.close()
         await self.send_text_to_client("\r\nSSH connection terminated by user.\r\n")
         await self.close()
-        logger.info(f"SSH connection to host_id {self.scope['url_route']['kwargs'].get('host_id')} terminated by user {self.scope['user']}")
+        logger.info(f"SSH connection terminated by user {self.scope['user']}")
