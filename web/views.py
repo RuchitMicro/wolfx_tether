@@ -56,7 +56,7 @@ def terminal_view(request, host_id):
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden("You do not have the required permission to view this host.")
 
-    return render(request, 'web/terminal.html', {'host_id': host_id, 'host': host})
+    return render(request, 'web/terminal.html', {'host_id': host_id, 'host': host,'websocket_url': settings.WEBSOCKET_URL})
 
 
 
