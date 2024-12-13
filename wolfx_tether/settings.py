@@ -26,6 +26,11 @@ SECRET_KEY = 'django-insecure-9)3dgg7ca0(0j+w6)dgb&w6kn*@3j1b=qbru#!4-5)ur#ni3%c
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+if DEBUG == True:
+    WEBSOCKET_URL = "ws://127.0.0.1:8080/"
+else:
+    WEBSOCKET_URL = "wss://tether.wolfx.io/"
+
 ALLOWED_HOSTS = ['*']
 
 
