@@ -132,6 +132,13 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# CORS and CSRF Settings
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:8000",
+    "http://localhost:3000",
+    "http://localhost:8080",
+    "https://tether.wolfx.io",
+]
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
