@@ -135,10 +135,10 @@
     // Connect button creates WebSocket connection
     document.getElementById('connect_btn').addEventListener('click', function () {
         // Dynamically get host_id from Django context
-        const host_id = "{{ host_id }}"; // Ensure this is passed in the view context
-        const websocket_url = "{{ websocket_url }}";
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-        const wsHost = window.location.host;
+        const host_id = "{{ host_id }}";
+        const websocket_url = "{{ websocket_url }}";  
+        // We expect websocket_url to be something like "wss://tether.wolfx.io"
+        // Construct the full URL: wss://tether.wolfx.io/ws/ssh/<host_id>/
         const wsUrl = `${websocket_url}/ws/ssh/${host_id}/`;
 
         //const wsUrl = `${wsProtocol}127.0.0.1:8080/ws/ssh/${host_id}/`;

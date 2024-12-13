@@ -27,11 +27,17 @@ SECRET_KEY = 'django-insecure-9)3dgg7ca0(0j+w6)dgb&w6kn*@3j1b=qbru#!4-5)ur#ni3%c
 DEBUG = True
 
 if DEBUG == True:
-    WEBSOCKET_URL = "ws://127.0.0.1:8080/"
+    WEBSOCKET_URL = "ws://127.0.0.1:8080"
 else:
-    WEBSOCKET_URL = "wss://tether.wolfx.io/"
+    WEBSOCKET_URL = "wss://tether.wolfx.io"
 
 ALLOWED_HOSTS = ['*']
+
+# Ensure cookies are allowed to be sent with WebSocket requests.
+# If using HTTPS and you want to allow cookies over cross-site contexts, adjust as follows:
+SESSION_COOKIE_SAMESITE = None
+SESSION_COOKIE_SECURE = True  # if your site runs over HTTPS
+CSRF_TRUSTED_ORIGINS = ['*']
 
 
 # Application definition

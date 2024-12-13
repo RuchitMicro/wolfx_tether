@@ -20,7 +20,7 @@ django.setup()
 from web.routing import websocket_urlpatterns
 
 application = ProtocolTypeRouter({
-    "http": get_asgi_application(),  # This serves your Django views over ASGI
+    "http": get_asgi_application(),
     "websocket": AllowedHostsOriginValidator(
         AuthMiddlewareStack(
             URLRouter(
@@ -29,4 +29,3 @@ application = ProtocolTypeRouter({
         )
     ),
 })
-
