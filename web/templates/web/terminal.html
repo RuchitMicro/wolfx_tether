@@ -137,8 +137,12 @@
         // Dynamically get host_id from Django context
         const host_id = "{{ host_id }}"; // Ensure this is passed in the view context
         const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-        //const wsUrl = `${wsProtocol}127.0.0.1:8080/ws/ssh/${host_id}/`;
-        const wsUrl = `${wsProtocol}${window.location.host}/ws/ssh/${host_id}/`;
+        const wsHost = window.location.host;
+        console.log(wsHost)
+        const wsUrl = `${wsProtocol}${wsHost}/ws/ssh/${host_id}/`;
+
+        // const wsUrl = `${wsProtocol}127.0.0.1:8080/ws/ssh/${host_id}/`;
+        // const wsUrl = `${wsProtocol}${window.location.host}/ws/ssh/${host_id}/`;
         
         const statusSpan = document.getElementById('status');
 
