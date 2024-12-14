@@ -281,7 +281,7 @@ class Host(CommonModel):
     
     admin_meta = {
         'list_display': ['name', 'host_address', 'port', 'username', 'created_at', 'updated_at','open_terminal'],
-        'search_display': ['name','host_address','port','username',],
+        'search_fields': ['name','host_address','port','username',],
         'list_filter': ['use_credential'],
         'radio_fields'  :{"use_credential": admin.VERTICAL}
         
