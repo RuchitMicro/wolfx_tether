@@ -1,3 +1,5 @@
+# consumers.py
+import io
 import json
 import paramiko
 import threading
@@ -61,24 +63,32 @@ class SSHConsumer(AsyncWebsocketConsumer):
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-            if host.pem_file:
-                pkey = paramiko.RSAKey.from_private_key_file(host.pem_file.path)
+            if host.use_credential == 'pem':
+                # Decrypt the PEM data
+                decrypted_pem = host.decrypt_pem(host.encrypted_pem)
+                if not decrypted_pem:
+                    raise ValueError("Decryption of PEM file failed.")
+
+                # Load the key from decrypted PEM data
+                pkey = paramiko.RSAKey.from_private_key(io.StringIO(decrypted_pem.decode('utf-8')))
                 self.ssh_client.connect(
-                    hostname=host.ip,
+                    hostname=host.host_address,
                     port=host.port,
                     username=host.username,
                     pkey=pkey,
                     timeout=10
                 )
-            else:
+            elif host.use_credential == 'password':
                 decrypted_password = host.decrypt_password(host.password)
                 self.ssh_client.connect(
-                    hostname=host.ip,
+                    hostname=host.host_address,
                     port=host.port,
                     username=host.username,
                     password=decrypted_password,
                     timeout=10
                 )
+            else:
+                raise ValueError("Invalid credential type specified.")
 
             self.ssh_channel = self.ssh_client.invoke_shell(term='xterm')
             self.ssh_channel.settimeout(0.0)
@@ -87,7 +97,7 @@ class SSHConsumer(AsyncWebsocketConsumer):
             self.output_thread = threading.Thread(target=self.read_ssh_output, daemon=True)
             self.output_thread.start()
 
-            logger.info(f"SSH connection established to {host.ip} by user {self.scope['user']}")
+            logger.info(f"SSH connection established to {host.host_address} by user {self.scope['user']}")
 
         except Exception as e:
             await self.send_text_to_client(f"Error: Unable to establish SSH connection. {str(e)}")

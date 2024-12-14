@@ -1,6 +1,7 @@
 # Code generated from Spectre
 from django.db                          import models, IntegrityError
 from django.db.models.aggregates        import Max
+from django.contrib                     import admin
 from django.contrib.sessions.models     import Session
 from django.contrib.auth.models         import User
 from django.db.models                   import Avg
@@ -8,6 +9,8 @@ from django.core.exceptions             import ValidationError
 from django.core.serializers            import serialize
 from django.conf                        import settings
 from django.db.models.signals           import pre_save
+from django.utils.html                  import format_html
+from django.urls                        import reverse
 
 # Timezone
 from django.utils   import timezone
@@ -260,101 +263,145 @@ class Contact(CommonModel):
         )
 
 
-# Hosts
 class Host(CommonModel):
-    name            =       models.CharField                (max_length = 300, help_text="Enter a unique name for the host.")
-    ip              =       models.GenericIPAddressField    (help_text = "Enter the IPv4 or IPv6 address of the host.")
-    port            =       models.IntegerField             (default = 22, help_text="Specify the port number for SSH connections (default is 22).")
-    username        =       models.CharField                (max_length = 300, help_text="Enter the username for authenticating with the host.")
-    password        =       models.CharField                (max_length = 300, blank=True,null=True, help_text="Enter the password for authentication. Leave blank if using a PEM file.")
-    pem_file        =       models.FileField                (upload_to = 'pem_file/', blank=True,null=True, help_text="Upload a PEM file for key-based authentication. Leave blank if using a password.")
-    description     =       models.TextField                (blank = True,null=True, help_text="Provide a brief description or notes about the host.")
+    HOST_ADDRESS_VALIDATOR = re.compile(
+        r"^(?:(?:[a-zA-Z0-9-]+\.)+(?:[a-zA-Z]{2,})|(?:\d{1,3}\.){3}\d{1,3})$"
+    )
+    
+    name            =   models.CharField    (max_length=300,null=True, help_text="Enter a unique name for the host.")
+    host_address    =   models.CharField    (max_length=255,null=True,help_text="Enter an host_address(ip) or domain name for the host.",)
+    port            =   models.IntegerField (default=22,null=True, help_text="Specify the port number for SSH connections (default is 22).")
+    username        =   models.CharField    (max_length=300,null=True, help_text="Enter the username for authenticating with the host.")
+    password        =   models.CharField    (max_length=300, blank=True, null=True, help_text="Enter the password for authentication and select use_credentials to Password")
+    pem_file        =   models.FileField    (upload_to='pem_file/', blank=True, null=True, help_text="Upload a PEM file for key-based authentication and and select use_credentials to PEM File")
+    use_credential  =   models.CharField    (max_length=10,choices=[("password", "Password"),("pem", "PEM File"),],default="password",help_text="Specify whether to use a password or PEM file for authentication.",)
+    description     =   models.TextField    (blank=True, null=True, help_text="Provide a brief description or notes about the host.")
 
+    encrypted_pem   = models.BinaryField(blank=True, null=True, help_text="Encrypted PEM file data.")
+    
     admin_meta = {
-        'list_display': ['name', 'ip', 'port', 'username', 'created_at', 'updated_at'],
+        'list_display': ['name', 'host_address', 'port', 'username', 'created_at', 'updated_at','open_terminal'],
+        'search_display': ['name','host_address','port','username',],
+        'list_filter': ['use_credential'],
+        'radio_fields'  :{"use_credential": admin.VERTICAL}
+        
     }
+    
+    def open_terminal(self):
+        """
+        Add a clickable link in the admin list view that redirects to the terminal view.
+        """
+        url = reverse('terminal-view', args=[self.id])  # Use the terminal-view URL pattern
+        return format_html(f'<a href="{url}" target="_blank">Open Terminal</a>')
 
-    def __str__(self):
-        return str(self.name)+": "+ str(self.ip)
-
+    open_terminal.short_description = "Action"
 
     @staticmethod
     def _get_fernet_key():
         """
-        Derive a 32-byte Fernet key from the Django SECRET_KEY.  
-        This method:
-        - Takes the Django SECRET_KEY (a string).
-        - Uses SHA256 to hash it.
-        - Base64 urlsafe encodes the hash digest to get a 32-byte key suitable for Fernet.
-
-        This ensures that even if SECRET_KEY isn't exactly 32 bytes, 
-        we still get a proper Fernet key.
+        Derive a 32-byte Fernet key from the Django SECRET_KEY.
         """
-        secret      = settings.SECRET_KEY.encode('utf-8')
-        sha         = hashlib.sha256(secret).digest()
-        fernet_key  = base64.urlsafe_b64encode(sha)
+        secret = settings.SECRET_KEY.encode('utf-8')
+        sha = hashlib.sha256(secret).digest()
+        fernet_key = base64.urlsafe_b64encode(sha)
         return fernet_key
 
     @staticmethod
     def encrypt_password(plain_text_password):
         """
         Encrypt the given plain text password using Fernet symmetric encryption.
-        Returns the encrypted password as a bytes-like object base64 encoded 
-        so it can be safely stored in the database as a string.
-
-        If the plain_text_password is None or empty, return it as is.
         """
         if not plain_text_password:
             return plain_text_password
-        fernet_key  = Host._get_fernet_key()
-        f           = Fernet(fernet_key)
+        fernet_key = Host._get_fernet_key()
+        f = Fernet(fernet_key)
         encrypted = f.encrypt(plain_text_password.encode('utf-8'))
-        # Convert to a standard string to store in DB
         return encrypted.decode('utf-8')
 
     @staticmethod
     def decrypt_password(encrypted_password):
         """
         Decrypt the given encrypted password using Fernet symmetric decryption.
-        Returns the original plain text password.
-
-        If encrypted_password is None or empty, return it as is.
-        If any error occurs during decryption (e.g. invalid token), 
-        return an empty string to avoid throwing exceptions at runtime.
         """
         if not encrypted_password:
             return encrypted_password
         try:
-            fernet_key  = Host._get_fernet_key()
-            f           = Fernet(fernet_key)
-            decrypted   = f.decrypt(encrypted_password.encode('utf-8'))
+            fernet_key = Host._get_fernet_key()
+            f = Fernet(fernet_key)
+            decrypted = f.decrypt(encrypted_password.encode('utf-8'))
             return decrypted.decode('utf-8')
         except Exception:
-            # If there's any issue with decryption, return empty string
             return ""
+
+    @staticmethod
+    def encrypt_pem(pem_data):
+        """
+        Encrypt PEM data using Fernet symmetric encryption.
+        """
+        if not pem_data:
+            return pem_data
+        fernet_key = Host._get_fernet_key()
+        f = Fernet(fernet_key)
+        encrypted = f.encrypt(pem_data)
+        return encrypted
+
+    @staticmethod
+    def decrypt_pem(encrypted_pem):
+        """
+        Decrypt PEM data using Fernet symmetric decryption.
+        """
+        if not encrypted_pem:
+            return encrypted_pem
+        try:
+            fernet_key = Host._get_fernet_key()
+            f = Fernet(fernet_key)
+            decrypted = f.decrypt(encrypted_pem)
+            return decrypted
+        except Exception:
+            return b""
+        
+    def __str__(self):
+        return f"{self.name}: {self.host_address}"
 
 # Signal to ensure password is always encrypted before saving
 @receiver(pre_save, sender=Host)
-def encrypt_host_password_before_save(sender, instance, **kwargs):
+def encrypt_host_credentials_before_save(sender, instance, **kwargs):
     """
-    This signal ensures that whenever a Host is saved, 
-    its password field is stored in encrypted form.
+    This signal ensures that whenever a Host is saved,
+    its password and pem_file fields are stored in encrypted form.
+    """
+    
+    """
+    Validates if the input is a valid domain name or IP address.
+    """
+    if not Host.HOST_ADDRESS_VALIDATOR.match(instance.host_address):
+        raise ValidationError(
+            f"{instance.host_address} is not a valid IP address or domain name."
+        )
 
-    Steps:
-    - If instance.password is not empty and is not already encrypted by Fernet, 
-      encrypt it here. We do a naive check by trying to decrypt it; 
-      if we succeed (which would mean it's already encrypted), we skip re-encryption.
-      If it fails, we proceed with encryption. This prevents double encryption.
-    """
+    # Encrypt Password
     if instance.password:
-        # Attempt to decrypt to check if it's already encrypted.
-        # If this returns empty string (error) or doesn't match original password pattern, 
-        # we assume it's not yet encrypted.
         test_decrypt = Host.decrypt_password(instance.password)
         if test_decrypt == "":
-            # It's likely not encrypted yet, so encrypt now.
+            # Password is not encrypted yet
             instance.password = Host.encrypt_password(instance.password)
-        # If test_decrypt != "", then it's already encrypted and we do nothing.
+
+    # Encrypt PEM File
+    if instance.pem_file:
+        # Read the uploaded PEM file
+        pem_content = instance.pem_file.read()
+        if pem_content:
+            # Encrypt the PEM data
+            encrypted_pem = Host.encrypt_pem(pem_content)
+            # Store the encrypted data
+            instance.encrypted_pem = encrypted_pem
+            # Clear the pem_file field
+            instance.pem_file = None
+
+    # Ensure that if pem_file is being cleared, encrypted_pem is also cleared
+    if not instance.pem_file and not instance.encrypted_pem:
+        instance.encrypted_pem = None
+        
 
 # Blog Models
 class BlogCategory(CommonModel):

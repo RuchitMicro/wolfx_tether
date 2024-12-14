@@ -5,11 +5,16 @@ from django.forms               import widgets
 from django.utils.safestring    import mark_safe
 from django.db                  import models
 
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
+from django.contrib.auth.models import User, Group
+
 # Imports for Dynamic app registrations
 from django.apps            import apps
 
 # Unfold 
 from unfold.admin                       import ModelAdmin, TabularInline, StackedInline
+from unfold.contrib.forms.widgets       import WysiwygWidget
 from import_export.admin                import ImportExportModelAdmin
 from unfold.contrib.import_export.forms import ExportForm, ImportForm
 from django.utils.translation           import gettext_lazy as _
@@ -25,6 +30,17 @@ try:
     COMMON_MODEL_AVAILABLE = True
 except ImportError:
     COMMON_MODEL_AVAILABLE = False
+    
+admin.site.unregister(User)
+admin.site.unregister(Group)
+
+@admin.register(User)
+class UserAdmin(BaseUserAdmin, ModelAdmin):
+    pass
+
+@admin.register(Group)
+class GroupAdmin(BaseGroupAdmin, ModelAdmin):
+    pass
 
 
 # CONFIG CONSTANTS
@@ -119,8 +135,14 @@ class GenericStackedAdmin(TabularInline):
 
 
 class GenericAdmin(GuardedModelAdmin, ModelAdmin, ImportExportModelAdmin):
-    import_form_class = ImportForm
-    export_form_class = ExportForm
+    # import_form_class = ImportForm
+    # export_form_class = ExportForm
+    
+    formfield_overrides = {
+        models.TextField: {
+            "widget": WysiwygWidget,
+        }
+    }
     
     def __init__(self, model, admin_site):
         self.model = model

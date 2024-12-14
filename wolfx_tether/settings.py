@@ -182,119 +182,106 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 from django.templatetags.static import static
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
+
 UNFOLD = {
     "SITE_TITLE": 'Wolfx Tether Admin',
     "SITE_HEADER": 'Wolfx Tether Admin',
     "SITE_URL": "/",
-    # "SITE_ICON": lambda request: static("icon.svg"),  # both modes, optimise for 32px height
-    # "SITE_ICON": {
-    #     "light": lambda request: static("icon-light.svg"),  # light mode
-    #     "dark": lambda request: static("icon-dark.svg"),  # dark mode
-    # },
-    # # "SITE_LOGO": lambda request: static("logo.svg"),  # both modes, optimise for 32px height
-    # "SITE_LOGO": {
-    #     "light": lambda request: static("logo-light.svg"),  # light mode
-    #     "dark": lambda request: static("logo-dark.svg"),  # dark mode
-    # },
-    "SITE_SYMBOL": "speed",  # symbol from icon set
-    "SHOW_HISTORY": True, # show/hide "History" button, default: True
-    "SHOW_VIEW_ON_SITE": True, # show/hide "View on site" button, default: True
-    # "ENVIRONMENT": "sample_app.environment_callback",
-    # "DASHBOARD_CALLBACK": "web.views.dashboard_callback",
-    "THEME": "light", # Force theme: "dark" or "light". Will disable theme switcher
-    # "LOGIN": {
-    #     "image": lambda request: static("sample/login-bg.jpg"),
-    #     "redirect_after": lambda request: reverse_lazy("admin:web_APP_MODEL_changelist"),
-    # },
-    # "STYLES": [
-    #     lambda request: static("web/css/style.css"),
-    # ],
-    # "SCRIPTS": [
-    #     lambda request: static("js/script.js"),
-    # ],
+    "SITE_SYMBOL": "code",  # symbol from icon set
+    "SHOW_HISTORY": True,  # show/hide "History" button, default: True
+    "SHOW_VIEW_ON_SITE": True,  # show/hide "View on site" button, default: True
+    "THEME": "dark",  # Force theme: "dark" or "light". Will disable theme switcher
     "COLORS": {
-        "primary": {
-            "50": "250 245 255",
-            "100": "243 232 255",
-            "200": "233 213 255",
-            "300": "216 180 254",
-            "400": "192 132 252",
-            "500": "168 85 247",
-            "600": "147 51 234",
-            "700": "126 34 206",
-            "800": "107 33 168",
-            "900": "88 28 135",
-            "950": "59 7 100",
-        },
+    "font": {
+        "subtle-light": "113 128 150",
+        "subtle-dark": "176 192 213",
+        "default-light": "85 100 122",
+        "default-dark": "220 225 231",
+        "important-light": "28 34 46",
+        "important-dark": "248 250 252"
     },
-    # "EXTENSIONS": {
-    #     "modeltranslation": {
-    #         "flags": {
-    #             "en": "🇬🇧",
-    #             "fr": "🇫🇷",
-    #             "nl": "🇧🇪",
-    #         },
-    #     },
-    # },
+    "primary": {
+        "50": "242 245 250",
+        "100": "229 236 247",
+        "200": "204 222 242",
+        "300": "153 192 229",
+        "400": "102 162 217",
+        "500": "51 132 204",
+        "600": "41 109 170",
+        "700": "33 87 136",
+        "800": "28 71 111",
+        "900": "23 58 89",
+        "950": "14 35 54"
+    }
+},
     "SIDEBAR": {
         "show_search": True,
-        # "show_all_applications": True,
         "navigation": [
-        {
-            "title": ("Main"),
-            "items": [
-                {
-                    "title": ("Dashboard"),
-                    "icon": "dashboard",  
-                    "link": reverse_lazy("admin:index"),
-                },
-                {
-                    "title": ("Host"),
-                    "icon": "dns",  
-                    "link": reverse_lazy("admin:web_host_changelist"),
-                },
-                {
-                    "title": ("SiteSetting"),
-                    "icon": "settings",  
-                    "link": reverse_lazy("admin:web_sitesetting_changelist"),
-                },
-                {
-                    "title": ("ImageMaster"),
-                    "icon": "image",  
-                    "link": reverse_lazy("admin:web_imagemaster_changelist"),
-                },
-                {
-                    "title": ("FileMaster"),
-                    "icon": "file_copy",  
-                    "link": reverse_lazy("admin:web_filemaster_changelist"),
-                },
-                {
-                    "title": ("Head"),
-                    "icon": "print",  # Icon for "print" is OK, consider "title" if it refers to headings.
-                    "link": reverse_lazy("admin:web_head_changelist"),
-                },
-                {
-                    "title": ("Contact"),
-                    "icon": "contact_mail",  
-                    "link": reverse_lazy("admin:web_contact_changelist"),
-                },
-            ],
-        },
-        {
-            "title": ("Authentication and Authorization"),
-            "separator": True,
-            "items": [
-                {
-                    "title": ("Users"),
-                    "icon": "person",  
-                    "link": "/admin/auth/user/",
-                },
-                {
-                    "title": ("Groups"),
-                    "icon": "group",  
-                    "link": "/admin/auth/group/",
-                },
-            ],
-        },]
-    }
+            {
+                "title": ("Main"),
+                "items": [
+                    {
+                        "title": ("Dashboard"),
+                        "icon": "dashboard",
+                        "link": reverse_lazy("admin:index"),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
+                    {
+                        "title": ("Host"),
+                        "icon": "dns",
+                        "link": reverse_lazy("admin:web_host_changelist"),
+                        "permission": lambda request: request.user.has_perm("web.view_host"),
+                    },
+                    {
+                        "title": ("SiteSetting"),
+                        "icon": "settings",
+                        "link": reverse_lazy("admin:web_sitesetting_changelist"),
+                        "permission": lambda request: request.user.has_perm("web.view_sitesetting"),
+                    },
+                    {
+                        "title": ("ImageMaster"),
+                        "icon": "image",
+                        "link": reverse_lazy("admin:web_imagemaster_changelist"),
+                        "permission": lambda request: request.user.has_perm("web.view_imagemaster"),
+                    },
+                    {
+                        "title": ("FileMaster"),
+                        "icon": "file_copy",
+                        "link": reverse_lazy("admin:web_filemaster_changelist"),
+                        "permission": lambda request: request.user.has_perm("web.view_filemaster"),
+                    },
+                    {
+                        "title": ("Head"),
+                        "icon": "print",
+                        "link": reverse_lazy("admin:web_head_changelist"),
+                        "permission": lambda request: request.user.has_perm("web.view_head"),
+                    },
+                    {
+                        "title": ("Contact"),
+                        "icon": "contact_mail",
+                        "link": reverse_lazy("admin:web_contact_changelist"),
+                        "permission": lambda request: request.user.has_perm("web.view_contact"),
+                    },
+                ],
+            },
+            {
+                "title": ("Authentication and Authorization"),
+                "separator": True,
+                "items": [
+                    {
+                        "title": ("Users"),
+                        "icon": "person",
+                        "link": "/admin/auth/user/",
+                        "permission": lambda request: request.user.is_staff,
+                    },
+                    {
+                        "title": ("Groups"),
+                        "icon": "group",
+                        "link": "/admin/auth/group/",
+                        "permission": lambda request: request.user.is_staff,
+                    },
+                ],
+            },
+        ],
+    },
 }
