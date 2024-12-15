@@ -271,16 +271,16 @@ class Host(CommonModel):
     name            =   models.CharField    (max_length=300,null=True, help_text="Enter a unique name for the host.")
     host_address    =   models.CharField    (max_length=255,null=True,help_text="Enter an host_address(ip) or domain name for the host.",)
     port            =   models.IntegerField (default=22,null=True, help_text="Specify the port number for SSH connections (default is 22).")
-    username        =   models.CharField    (max_length=300,null=True, help_text="Enter the username for authenticating with the host.")
+    username        =   models.CharField    (max_length=300,default="ubuntu",null=True, help_text="Enter the username for authenticating with the host.")
     password        =   models.CharField    (max_length=300, blank=True, null=True, help_text="Enter the password for authentication and select use_credentials to Password")
     pem_file        =   models.FileField    (upload_to='pem_file/', blank=True, null=True, help_text="Upload a PEM file for key-based authentication and and select use_credentials to PEM File")
-    use_credential  =   models.CharField    (max_length=10,choices=[("password", "Password"),("pem", "PEM File"),],default="password",help_text="Specify whether to use a password or PEM file for authentication.",)
+    use_credential  =   models.CharField    (max_length=10,choices=[("password", "Password"),("pem", "PEM File"),],default="pem",help_text="Specify whether to use a password or PEM file for authentication.",)
     description     =   models.TextField    (blank=True, null=True, help_text="Provide a brief description or notes about the host.")
 
     encrypted_pem   = models.BinaryField(blank=True, null=True, help_text="Encrypted PEM file data.")
     
     admin_meta = {
-        'list_display': ['name', 'host_address', 'port', 'username', 'created_at', 'updated_at','open_terminal'],
+        'list_display': ['name', 'host_address', 'port', 'username', 'use_credential','open_terminal'],
         'search_fields': ['name','host_address','port','username',],
         'list_filter': ['use_credential'],
         'radio_fields'  :{"use_credential": admin.VERTICAL}

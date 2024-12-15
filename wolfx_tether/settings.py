@@ -267,18 +267,19 @@ UNFOLD = {
             {
                 "title": ("Authentication and Authorization"),
                 "separator": True,
+                "collapsible": True,
                 "items": [
                     {
                         "title": ("Users"),
                         "icon": "person",
                         "link": "/admin/auth/user/",
-                        "permission": lambda request: request.user.is_staff,
+                        "permission": lambda request: request.user.has_perm("auth.view_user"),
                     },
                     {
                         "title": ("Groups"),
                         "icon": "group",
                         "link": "/admin/auth/group/",
-                        "permission": lambda request: request.user.is_staff,
+                        "permission": lambda request: request.user.has_perm("auth.view_group")
                     },
                 ],
             },
