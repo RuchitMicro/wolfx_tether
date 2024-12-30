@@ -1,7 +1,7 @@
 from django.shortcuts           import redirect, render,get_object_or_404
 from django.views               import View                                                         # Importing django class based view
 from django.views.generic       import CreateView, TemplateView, ListView, UpdateView, DetailView   # Importing django generic class based view
-from django.http                import Http404
+from django.http                import Http404, HttpResponseForbidden
 
 from django.contrib.auth.mixins     import LoginRequiredMixin
 from django.contrib.auth.forms      import AuthenticationForm, UserCreationForm
@@ -52,8 +52,6 @@ def terminal_view(request, host_id):
 
     # Check if the current logged-in user has 'view_host' permission on this host
     if not request.user.has_perm('view_host', host):
-        # If not permitted, return a 403 response
-        from django.http import HttpResponseForbidden
         return HttpResponseForbidden("You do not have the required permission to view this host.")
 
     return render(request, 'web/terminal.html', {'host_id': host_id, 'host': host,'websocket_url': settings.WEBSOCKET_URL})

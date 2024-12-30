@@ -24,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-9)3dgg7ca0(0j+w6)dgb&w6kn*@3j1b=qbru#!4-5)ur#ni3%c'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 if DEBUG == True:
     WEBSOCKET_URL = "ws://127.0.0.1:8080"
@@ -62,9 +62,15 @@ INSTALLED_APPS = [
     'simple_history',
     'import_export',
     'tinymce',
+    # 'grape_js',
     
     'web'
 ]
+
+APPEND_SLASH = True
+
+# import paramiko
+# paramiko.util.log_to_file("paramiko_debug.log")
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -190,7 +196,7 @@ UNFOLD = {
     "SITE_SYMBOL": "code",  # symbol from icon set
     "SHOW_HISTORY": True,  # show/hide "History" button, default: True
     "SHOW_VIEW_ON_SITE": True,  # show/hide "View on site" button, default: True
-    "THEME": "dark",  # Force theme: "dark" or "light". Will disable theme switcher
+    # "THEME": "dark",  # Force theme: "dark" or "light". Will disable theme switcher
     "COLORS": {
     "font": {
         "subtle-light": "113 128 150",
