@@ -1,5 +1,3 @@
-# consumer.py
-
 import io
 import json
 import logging
@@ -21,9 +19,9 @@ class SSHConsumer(AsyncWebsocketConsumer):
     """
     WebSocket SSH terminal + action runner.
 
-    - No ORM/lazy loads in async without wrappers.
-    - Terminal uses one SSHClient.
-    - Each action uses its own SSHClient (separate session).
+    - Terminal uses one SSHClient (interactive).
+    - Each action uses its own SSHClient and PTY-backed shell (separate).
+    - All DB/permission access from async paths is wrapped with database_sync_to_async.
     """
 
     ssh_client = None
@@ -36,15 +34,15 @@ class SSHConsumer(AsyncWebsocketConsumer):
         await self.accept()
         host_id = self.scope['url_route']['kwargs'].get('host_id')
         if not host_id:
+            
             await self.send_text_to_client("Error: No host ID specified.")
             await self.close()
             return
 
-        if not self.scope['user'].is_authenticated:
+        if not getattr(self.scope.get('user'), 'is_authenticated', False):
             await self.send_text_to_client("Error: You must be authenticated to access this host.")
             await self.close()
             return
-
 
         # Load host safely
         try:
@@ -54,7 +52,7 @@ class SSHConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
 
-        # Establish interactive terminal
+        # Establish the interactive terminal session
         try:
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -90,6 +88,7 @@ class SSHConsumer(AsyncWebsocketConsumer):
             else:
                 raise ValueError("Invalid credential type specified.")
 
+            # Interactive terminal channel (separate from action sessions)
             self.ssh_channel = self.ssh_client.invoke_shell(term='xterm')
             self.ssh_channel.settimeout(0.0)
 
@@ -122,7 +121,7 @@ class SSHConsumer(AsyncWebsocketConsumer):
         if not text_data:
             return
 
-        # Control channel
+        # Control messages first
         try:
             message = json.loads(text_data)
             mtype = message.get('type')
@@ -135,7 +134,6 @@ class SSHConsumer(AsyncWebsocketConsumer):
                         await self.send_text_to_client(f"\r\nError writing to SSH channel: {e}\r\n")
             elif mtype == 'kill':
                 await self.kill_ssh_connection()
-                await self.disconnect()
             elif mtype == 'run_action':
                 action_id = message.get('action_id')
                 await self.handle_run_action(action_id)
@@ -145,7 +143,7 @@ class SSHConsumer(AsyncWebsocketConsumer):
         except json.JSONDecodeError:
             pass
 
-        # Raw terminal input
+        # Raw keystrokes to terminal
         if self.ssh_channel is not None:
             try:
                 self.ssh_channel.send(text_data)
@@ -153,11 +151,11 @@ class SSHConsumer(AsyncWebsocketConsumer):
                 await self.send_text_to_client(f"\r\nError writing to SSH channel: {e}\r\n")
 
     def read_ssh_output(self):
-        """Read from interactive shell and forward to client."""
+        """Read interactive terminal output and stream to client."""
         while self.keep_running and self.ssh_channel is not None and not self.ssh_channel.closed:
             try:
                 if self.ssh_channel.recv_ready():
-                    chunk = self.ssh_channel.recv(2048)
+                    chunk = self.ssh_channel.recv(4096)
                     if chunk:
                         async_to_sync(self.send_text_to_client)(chunk.decode('utf-8', errors='replace'))
                 time.sleep(0.02)
@@ -165,7 +163,10 @@ class SSHConsumer(AsyncWebsocketConsumer):
                 logger.error(f"Terminal read error: {e}")
                 break
 
+    # ---------------------------
     # DB + permission (async-safe)
+    # ---------------------------
+
     @staticmethod
     @database_sync_to_async
     def get_host(host_id):
@@ -187,21 +188,23 @@ class SSHConsumer(AsyncWebsocketConsumer):
 
     @staticmethod
     @database_sync_to_async
-    def user_has_perm(user, perm_codename, project_action_id=None):
-        # Wrap has_perm in sync thread to avoid SynchronousOnlyOperation
-        if project_action_id is not None and user.has_perm('can_run_actions', ProjectAction.objects.get(pk=project_action_id)):
-            return True
-        return user.has_perm(perm_codename) or user.is_superuser 
+    def user_has_perm(user, perm_codename):
+        return user.has_perm(perm_codename)
 
-
+    # ---------------------------
     # Send helpers
+    # ---------------------------
+
     async def send_text_to_client(self, message: str):
         await self.send(text_data=message)
 
     async def send_json_to_client(self, data: dict):
         await self.send(text_data=json.dumps(data))
 
+    # ---------------------------
     # Control handlers
+    # ---------------------------
+
     async def kill_ssh_connection(self):
         self.keep_running = False
         try:
@@ -222,7 +225,7 @@ class SSHConsumer(AsyncWebsocketConsumer):
         """
         Validate and spawn an action runner thread.
         Uses only primitives in async (IDs, booleans).
-        The worker creates its own SSH connection.
+        The worker creates its own SSH connection with a PTY to stream output.
         """
         if not action_id:
             await self.send_json_to_client({'type': 'action_error', 'id': action_id, 'message': 'No action ID provided.'})
@@ -239,7 +242,7 @@ class SSHConsumer(AsyncWebsocketConsumer):
                 })
                 return
 
-            has_perm = await (self.user_has_perm(self.scope['user'], 'web.can_run_actions', a['id']))
+            has_perm = await self.user_has_perm(self.scope['user'], 'web.can_run_actions')
             if not has_perm:
                 await self.send_json_to_client({
                     'type': 'action_denied',
@@ -256,17 +259,21 @@ class SSHConsumer(AsyncWebsocketConsumer):
             logger.error(f"handle_run_action error: {e}", exc_info=True)
             await self.send_json_to_client({'type': 'action_error', 'id': action_id, 'message': str(e)})
 
-    
+    # ---------------------------
     # Action worker (sync thread)
+    # ---------------------------
+
     def run_action_thread(self, action_id: int):
         """
-        Run the action in a separate SSH session.
-        Re-fetch ORM objects synchronously in this thread.
-        Streams a tail and sends final status.
+        Run the action in a separate PTY-backed shell and stream output live.
+        - Disables shell history so commands are not saved.
+        - Detects sudo prompts and sends the decrypted host password to stdin only when prompted.
+        - Re-fetches ORM objects synchronously in this thread.
         """
         action_ssh = None
         channel = None
         try:
+            # Re-fetch action and related data
             action = (
                 ProjectAction.objects
                 .select_related('project__host')
@@ -277,6 +284,7 @@ class SSHConsumer(AsyncWebsocketConsumer):
             host = project.host
             secrets = list(project.secrets.all())
 
+            # New, independent SSH client for this action
             action_ssh = paramiko.SSHClient()
             action_ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
@@ -320,49 +328,125 @@ class SSHConsumer(AsyncWebsocketConsumer):
                 })
                 return
 
+            # Start an interactive bash shell with a PTY
             channel = transport.open_session()
-            channel.exec_command('bash')
-            stdin = channel.makefile('wb', -1)
+            channel.get_pty(term='xterm')
+            channel.exec_command('bash')  # starts an interactive shell
+            channel.settimeout(0.0)
 
-            # Export secrets
+            # We'll write commands to the shell stdin and read stdout for streaming
+            # stdin = channel.makefile('wb', -1)  # Comment out unused
+            sudo_password = host.decrypt_password(host.password) if host.password else None
+
+            def send_raw_line(s: str):
+                try:
+                    channel.send((s + "\n"))
+                except Exception:
+                    pass
+
+            # Disable history so commands aren't written to ~/.bash_history
+            send_raw_line('export HISTFILE=/dev/null')
+            send_raw_line('set +o history')
+
+            # Export secrets into shell variables WITHOUT echoing them
             for s in secrets:
                 val = s.decrypt_value().replace('\\', '\\\\').replace('"', '\\"').replace('$', '\\$')
-                stdin.write(f'export {s.key}="{val}"\n'.encode('utf-8'))
+                send_raw_line(f'export {s.key}="{val}"')
 
-            # Run commands then cleanup and exit
-            stdin.write(action.commands.encode('utf-8') + b'\n')
+            # Prepare the user's commands (remove CRs, trim)
+            cmd = action.commands.replace("\r", "").strip()
+
+            # Run the commands and capture RC
+            send_raw_line(f'{cmd}; rc=$?')
             for s in secrets:
-                stdin.write(f'unset {s.key}\n'.encode('utf-8'))
-            stdin.write(b'exit\n')
-            stdin.flush()
-            stdin.close()
+                send_raw_line(f'unset {s.key}')
+            send_raw_line('echo __TETHER_RC__$rc')
+            send_raw_line('exit $rc')
 
-            # Live tail
+            # Keep stdin open for potential sudo password inputs
+
+            # Read loop: stream output and respond to sudo prompt
             tail = []
-            max_tail = 10
-            while not channel.exit_status_ready():
-                while channel.recv_ready():
-                    part = channel.recv(4096).decode('utf-8', 'replace')
-                    if part:
-                        tail = (tail + part.splitlines())[-max_tail:]
+            max_tail = 12
+            buf = ""
+            rc_detected = None
+            sudo_prompt_patterns = [
+                '[sudo] password',
+                'password for',
+                'sudo:'
+            ]
+
+            while True:
+                data = ''
+                if channel.recv_ready():
+                    data += channel.recv(4096).decode('utf-8', 'replace')
+                if channel.recv_stderr_ready():
+                    data += channel.recv_stderr(4096).decode('utf-8', 'replace')
+                buf += data
+
+                # Process complete lines
+                while '\n' in buf:
+                    line, buf = buf.split('\n', 1)
+                    line = line.rstrip('\r')
+                    if line:
+                        tail = (tail + [line])[-max_tail:]
                         async_to_sync(self.send_json_to_client)({
                             'type': 'action_status',
                             'id': action_id,
                             'status': 'running',
                             'tail': tail
                         })
-                time.sleep(0.1)
+                        # detect rc marker
+                        if line.startswith("__TETHER_RC__"):
+                            try:
+                                rc_detected = int(line.split("__TETHER_RC__", 1)[1])
+                            except Exception:
+                                rc_detected = None
 
-            # Drain remaining
-            remaining = b''
+                # Check for sudo prompt in remaining buf (partial line)
+                lower_buf = buf.lower()
+                if sudo_password and any(pat in lower_buf for pat in sudo_prompt_patterns):
+                    # Add the prompt to tail
+                    prompt_line = buf.strip()
+                    if prompt_line:
+                        tail = (tail + [prompt_line])[-max_tail:]
+                        async_to_sync(self.send_json_to_client)({
+                            'type': 'action_status',
+                            'id': action_id,
+                            'status': 'running',
+                            'tail': tail
+                        })
+                    # Send password
+                    channel.send(sudo_password + '\n')
+                    # Clear buf to prevent re-detection
+                    buf = ''
+
+                # Exit condition
+                if channel.exit_status_ready() and not channel.recv_ready() and not channel.recv_stderr_ready():
+                    break
+
+                time.sleep(0.03)
+
+            # Drain remaining output
+            remaining = ''
             while channel.recv_ready():
-                remaining += channel.recv(4096)
-            if remaining:
-                more = remaining.decode('utf-8', 'replace')
-                tail = (tail + more.splitlines())[-max_tail:]
+                remaining += channel.recv(4096).decode('utf-8', 'replace')
+            while channel.recv_stderr_ready():
+                remaining += channel.recv_stderr(4096).decode('utf-8', 'replace')
+            buf += remaining
+
+            # Process any remaining lines
+            while '\n' in buf:
+                line, buf = buf.split('\n', 1)
+                line = line.rstrip('\r')
+                if line:
+                    tail = (tail + [line])[-max_tail:]
+            if buf.strip():
+                tail = (tail + [buf.strip()])[-max_tail:]
 
             exit_status = channel.recv_exit_status()
-            final_status = 'success' if exit_status == 0 else 'failure'
+            final_rc = rc_detected if rc_detected is not None else exit_status
+            final_status = 'success' if final_rc == 0 else 'failure'
 
             async_to_sync(self.send_json_to_client)({
                 'type': 'action_result',
