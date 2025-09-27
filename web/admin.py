@@ -1,28 +1,31 @@
 from django.contrib             import admin
 from django.forms.models        import modelform_factory
 from django.utils.translation   import gettext_lazy as _
-from django.forms               import widgets
-from django.utils.safestring    import mark_safe
 from django.db                  import models
-
-from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
+from django.contrib.auth.admin  import UserAdmin as BaseUserAdmin, GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.models import User, Group
 
 # Imports for Dynamic app registrations
-from django.apps            import apps
+from django.apps                import apps
 
 # Unfold 
 from unfold.admin                       import ModelAdmin, TabularInline, StackedInline
-from unfold.contrib.forms.widgets       import WysiwygWidget
 from import_export.admin                import ImportExportModelAdmin
 from unfold.contrib.import_export.forms import ExportForm, ImportForm
 from django.utils.translation           import gettext_lazy as _
+from unfold.contrib.forms.widgets       import ArrayWidget, WysiwygWidget
+from unfold.forms                       import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
+
+
+from django.db.models       import ForeignKey
+from import_export          import resources
+from import_export.admin    import ImportExportModelAdmin
+
+from .models        import *
+from .widgets       import JsonEditorWidget
 
 # Django Guardian
 from guardian.admin import GuardedModelAdmin
-
-
 
 # Common Model
 try:
@@ -30,119 +33,108 @@ try:
     COMMON_MODEL_AVAILABLE = True
 except ImportError:
     COMMON_MODEL_AVAILABLE = False
-    
+
+
+# CONFIG CONSTANTS
+admin.site.site_header  = 'Django Admin'
+exempt                  = [] # modelname in this list will not be registered
+global_app_name         = 'web' # Replace '' with your app name
+
+# It is used to map the models to their Resource models
+resource_class_mapping = {
+    # User: UserResource,
+}
+
 admin.site.unregister(User)
 admin.site.unregister(Group)
 
+
 @admin.register(User)
 class UserAdmin(BaseUserAdmin, ModelAdmin):
-    pass
+    # Forms loaded from `unfold.forms`
+    form = UserChangeForm
+    add_form = UserCreationForm
+    change_password_form = AdminPasswordChangeForm
+
 
 @admin.register(Group)
 class GroupAdmin(BaseGroupAdmin, ModelAdmin):
     pass
 
+class GenericTabularAdmin(TabularInline):
+    extra   = 1
+    tab     = True
 
-# CONFIG CONSTANTS
-admin.site.site_header  = 'WOLFx Tether Admin'
-exempt                  = [] # modelname in this list will not be registered
-global_app_name         = 'web' # Replace '' with your app name
+    def __init__(self, parent_model, admin_site):
+        super().__init__(parent_model, admin_site)
+        self.filter_horizontal = self.get_many_to_many_fields()
+        self.admin_meta = getattr(self.model, 'admin_meta', {})
 
+        # Apply admin_meta attributes dynamically
+        try:
+            if self.admin_meta:
+                for attr, value in self.admin_meta.items():
+                    setattr(self, attr, value)
+        except Exception as e:
+            pass
 
+    def get_many_to_many_fields(self):
+        many_to_many_fields = [field.name for field in self.model._meta.many_to_many]
+        return many_to_many_fields
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # Handle foreign key filters defined in admin_meta
+        if self.admin_meta:
+            foreignkey_filters = self.admin_meta.get('foreignkey_filters', {})
+            if db_field.name in foreignkey_filters:
+                parent_obj = self.get_parent_instance(request)
+                filter_func = foreignkey_filters[db_field.name]
+                if callable(filter_func):
+                    kwargs['queryset'] = filter_func(request, parent_obj)
 
-# Json Editor Widget
-# https://github.com/json-editor/json-editor
-class JsonEditorWidget(widgets.Widget):
-    template_name = 'json_editor_widget.html'
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-    def __init__(self, schema, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.schema = schema
+    def get_parent_instance(self, request):
+        """
+        Get the parent instance (e.g., Villa) being edited in the admin panel.
+        """
+        try:
+            object_id = request.resolver_match.kwargs.get('object_id')
+            if object_id:
+                return self.parent_model.objects.get(pk=object_id)
+        except Exception:
+            return None
+    
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        # Check if the field is a TextField and override the widget if not in exclude "rtf_exclude" 
+        if isinstance(db_field, models.TextField):
+            # Check admin_meta for fields to exclude TinyMCE
+            exclude_fields = self.admin_meta.get('rtf_exclude', []) if self.admin_meta else []
+            if db_field.name not in exclude_fields:
+                kwargs["widget"] = WysiwygWidget()
+            
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
-    def render(self, name, value, attrs=None, renderer=None):
-        # Convert Python dictionary to JSON string
-        json_value = value if value else '{}'
-        # Render the JSON Editor
-        style = '''
-        .form-row {
-            overflow: visible !important;
-        }
-        .je-switcher{
-            margin-left: 0px !important;
-        }
-        .je-ready button{
-            padding: 5px 10px !important;
-            border: 1px solid grey !important;
-        }
-        .je-ready button i{
-            margin-right: 5px !important;
-            margin-left: 5px !important;
-        }
-        .je-indented-panel{
-            border-radius: 0px !important;
-            padding: 20px 15px !important;
-        }
-        '''
-        return mark_safe(f'''
-
-            <!-- FontAwesome CSS -->
-            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-
-            <!-- JSON Editor CSS -->
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@json-editor/json-editor@latest/dist/jsoneditor.min.css">
-
-            <!-- JSON Editor JS -->
-            <script src="https://cdn.jsdelivr.net/npm/@json-editor/json-editor@latest/dist/jsoneditor.min.js"></script>
-
-            <style>{style}</style>
-            <script src="https://cdn.jsdelivr.net/npm/@json-editor/json-editor@latest/dist/jsoneditor.min.js"></script>
-            <textarea name="{name}" id="tx_{attrs['id']}" style="display:none;">{json_value}</textarea>
-            <div id="editor_{attrs['id']}"></div>
-            <script>
-                document.addEventListener("DOMContentLoaded", function() {{
-                    var editor = new JSONEditor(document.getElementById("editor_{attrs['id']}"), {{
-                        schema: {self.schema},
-                        startval: {json_value},
-                        theme: 'html',
-                        iconlib: 'fontawesome5',
-                    }});
-                    editor.on('change', function() {{
-                        console.log("Change event triggered");
-                        console.log("Editor Value:", editor.getValue());
-                        document.getElementById("tx_{attrs['id']}").value = JSON.stringify(editor.getValue());
-                    }});
-                }});
-            </script>
-        ''')
-
-
-class GenericStackedAdmin(TabularInline):
-    extra = 1
-    # This method ensures the field order is correct for inlines as well
     def get_formset(self, request, obj=None, **kwargs):
-        formset         = super().get_formset(request, obj, **kwargs)
-        form            = formset.form
-        # custom_order    = [field for field in form.base_fields]
-        
+        formset = super().get_formset(request, obj, **kwargs)
+        form = formset.form
+
         if COMMON_MODEL_AVAILABLE:
             exempt_common_model_fields = [field.column for field in CommonModel._meta.fields]
             custom_order = [field for field in form.base_fields if field not in exempt_common_model_fields]
-            # custom_order += [field for field in CommonModel._meta.fields if field in form.base_fields]
         
         form.base_fields = {field: form.base_fields[field] for field in custom_order}
         return formset
 
+class GenericStackedAdmin(GenericTabularAdmin, StackedInline):
+    pass
 
-class GenericAdmin(GuardedModelAdmin, ModelAdmin, ImportExportModelAdmin):
-    # import_form_class = ImportForm
-    # export_form_class = ExportForm
-    
-    formfield_overrides = {
-        models.TextField: {
-            "widget": WysiwygWidget,
-        }
-    }
+
+
+
+class GenericAdmin(ModelAdmin, GuardedModelAdmin, ImportExportModelAdmin):
+    import_form_class = ImportForm
+    export_form_class = ExportForm
     
     def __init__(self, model, admin_site):
         self.model = model
@@ -179,6 +171,28 @@ class GenericAdmin(GuardedModelAdmin, ModelAdmin, ImportExportModelAdmin):
 
         super().__init__(model, admin_site)
         
+    def get_resource_class(self):
+        # Use the custom resource class if specified
+        resource_class = resource_class_mapping.get(self.model, None)
+        if resource_class:
+            return resource_class
+        # Fallback for models without a specific resource class
+        return type(
+            f'{self.model.__name__}Resource',
+            (resources.ModelResource,),
+            {
+                'Meta': type('Meta', (), {'model': self.model})
+            }
+        )
+
+    def has_add_permission(self, request):
+        """
+        Hide 'Add' button if 'single_entry' is True and an instance already exists.
+        """
+        if getattr(self.model, 'admin_meta', {}).get('single_entry') and self.model.objects.exists():
+            return False
+        return super().has_add_permission(request)
+          
     # Function to get the fieldsets
     def get_fieldsets(self, request, obj=None):
         if 'fieldsets' in self.admin_meta:
@@ -217,22 +231,30 @@ class GenericAdmin(GuardedModelAdmin, ModelAdmin, ImportExportModelAdmin):
         if isinstance(db_field, models.JSONField) and self.admin_meta:
             # Retrieve the schema configuration for JSON fields
             json_fields_meta = self.model.admin_meta.get('json_fields', {})
-
             # Retrieve the schema for the specific field, if defined
             json_schema = json_fields_meta.get(db_field.name, {}).get('schema')
-
             if json_schema:
                 # Initialize the custom widget with the specified schema
                 kwargs['widget'] = JsonEditorWidget(schema=json_schema)
             # else:                                                                                         # Patch this later
             #     # Else load the django-jsoneditor widget 
             #     kwargs['widget'] = JSONEditor()
-
+            
+        # Check if the field is a TextField and override the widget if not in exclude "rtf_exclude" 
+        if isinstance(db_field, models.TextField):
+            # Check admin_meta for fields to exclude WysiwygWidget
+            exclude_fields = self.admin_meta.get('rtf_exclude', []) if self.admin_meta else []
+            if db_field.name not in exclude_fields:
+                kwargs["widget"] = WysiwygWidget()    
+            
+        
         return super().formfield_for_dbfield(db_field, request, **kwargs)
     
     def get_readonly_fields(self, request, obj=None):
         # Get a list of non-editable fields
         readonly_fields = [field.name for field in self.model._meta.fields if (not field.editable or field.name == 'id')]
+        readonly_fields += self.admin_meta.get('readonly_fields', []) if self.admin_meta else []
+        
 
         return readonly_fields
     
@@ -266,26 +288,40 @@ class GenericAdmin(GuardedModelAdmin, ModelAdmin, ImportExportModelAdmin):
         related_model = apps.get_model(app_label=global_app_name, model_name=related_model_name)  # Replace 'your_app_name'
         inline_class_name = f"{related_model.__name__}Inline"
         
+        # Retrieve the admin_meta from the related model (Inline model) and get its admin_meta
+        # store inline attribute in "inline_admin_meta"
+        inline_admin_meta = getattr(related_model, 'admin_meta', {})
+
         class_attrs = {
-            'model'     : related_model,
-            'fk_name'   : fk_name,
-            'form'      : modelform_factory(related_model, exclude=[]),
+            'model': related_model,
+            'fk_name': fk_name,
+            'form': modelform_factory(related_model, exclude=[]),
+            'admin_meta': inline_admin_meta,  # Pass admin_meta to inline
         }
 
-        InlineAdminClass = type(inline_class_name, (GenericStackedAdmin,), class_attrs)
+        InlineAdminClass = type(inline_class_name, (GenericTabularAdmin,), class_attrs)
         self.inlines.append(InlineAdminClass)
 
     # Custom Media so that we can add custom js files
     class Media:
         js = ('https://code.jquery.com/jquery-3.7.0.js', )
 
-
-
+# Register all models in the app
 app = apps.get_app_config(global_app_name)
 for model_name, model in app.models.items():
-    # If model_name consists history
     if model_name not in exempt and 'histor' not in model_name.lower():
-        # print(model_name + ' '  + str(model))
-        # admin.site.register(model, GenericAdmin)
-        admin.site.register(model, GenericAdmin)
+        resource_class = resource_class_mapping.get(model, None)
+        if resource_class:
+            # Create a custom admin class with the resource_class
+            admin_class = type(
+                f'{model.__name__}Admin',
+                (GenericAdmin,),
+                {
+                    'resource_class': resource_class,
+                }
+            )
+        else:
+            admin_class = GenericAdmin
+
+        admin.site.register(model, admin_class)
     

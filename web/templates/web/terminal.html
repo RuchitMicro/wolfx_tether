@@ -15,191 +15,252 @@
 
 </head>
 
-<body>
-    <div id="status-bar" class="status-bar">
-        Status: <span id="status">Disconnected</span>
-    </div>
+<body class="tether-body">
 
-    <div id="terminal"></div>
+  <div class="page-wrap">
+    <header class="topbar">
+      <div class="brand">TETHER • Host Terminal</div>
+      <div class="status">Status: <span id="status" class="status-pill is-disconnected">Disconnected</span></div>
+    </header>
 
-    <div id="buttons" class="terminal-buttons">
-        <button id="connect_btn">
-            <div class="icon-container">
-                <img src="{%static 'web/img/connect.svg'%}" alt="">
-            </div>
-            <span>
-                Connect
-            </span>
-        </button>
-        <button id="kill_btn" disabled>
-            <div class="icon-container">
-                <img src="{%static 'web/img/kill.svg'%}" alt="">
-            </div>
-            Kill
-        </button>
-    </div>
+    <main class="grid">
+      <!-- Left: Terminal Card -->
+      <section class="card terminal-card">
+        <div class="card-header">
+          <div>
+            <h2>{{ host.name|default:"Host" }}</h2>
+            <p class="muted">{{ host.host_address }} · {{ host.username }} · Port {{ host.port }}</p>
+          </div>
+          <div class="btn-row">
+            <button id="connect_btn" class="btn primary">
+              <span>Connect</span>
+            </button>
+            <button id="kill_btn" class="btn danger" disabled>Kill</button>
+          </div>
+        </div>
 
-    <!-- Host Data Table -->
-    <div class="host-data">
-        <h2>Host Details: {{host.name}}</h2>
-        <table class="host-table">
-            <tbody>
-                <tr>
-                    <td data-label="Field">Name</td>
-                    <td data-label="Value">{{ host.name }}</td>
-                </tr>
-                <tr>
-                    <td data-label="Field">Host Address</td>
-                    <td data-label="Value">{{ host.host_address }}</td>
-                </tr>
-                <tr>
-                    <td data-label="Field">Port</td>
-                    <td data-label="Value">{{ host.port }}</td>
-                </tr>
-                <tr>
-                    <td data-label="Field">Username</td>
-                    <td data-label="Value">{{ host.username }}</td>
-                </tr>
-               
-                <tr>
-                    <td data-label="Field">Description</td>
-                    <td data-label="Value">{{ host.description|default:"N/A" }}</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
+        <div id="terminal" class="terminal"></div>
+      </section>
 
+      <!-- Right: Actions Card -->
+      <aside class="card actions-card">
+        <div class="card-header">
+          <h3>Project Actions</h3>
+          {% if can_run_actions %}
+            <span class="badge ok">You can run actions</span>
+          {% else %}
+            <span class="badge warn" title="Ask an admin to grant 'can_run_actions'">View only</span>
+          {% endif %}
+        </div>
 
+        <div id="actions_list" class="actions-list" data-can-run="{{ can_run_actions|yesno:'1,0' }}">
+          {% if actions %}
+            {% for a in actions %}
+              <div class="action-row" data-id="{{ a.id }}">
+                <div class="meta">
+                  <div class="name">{{ a.display_name }}</div>
+                  <div class="sub">{{ a.project.name }}</div>
+                </div>
+                <div class="controls">
+                  <span class="chip status-{{ a.status|default:'idle' }}" data-role="status">{{ a.status|default:"idle" }}</span>
+                  <button class="btn tiny run-btn" {% if not a.can_run %}disabled{% endif %}>Run</button>
+                </div>
+                <div class="tail" data-role="tail" hidden></div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="empty">No actions configured for this host.</div>
+          {% endif %}
+        </div>
+      </aside>
+    </main>
 
-    
-</body>
+    <!-- Host facts -->
+    <section class="card host-card">
+      <h4>Host Details</h4>
+      <div class="kv">
+        <div><span>Name</span><span>{{ host.name }}</span></div>
+        <div><span>Address</span><span>{{ host.host_address }}</span></div>
+        <div><span>Port</span><span>{{ host.port }}</span></div>
+        <div><span>User</span><span>{{ host.username }}</span></div>
+        <div class="full"><span>Description</span><span>{{ host.description|default:"—" }}</span></div>
+      </div>
+    </section>
+  </div>
 
-<!-- Include xterm.js and its addon dependencies -->
-<script src="https://unpkg.com/xterm/lib/xterm.js"></script>
-<script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  <!-- xterm -->
+  <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
+  <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
 
-<script>
-    // Initialize terminal
+  <script>
     const term = new Terminal({
-        cursorBlink: true,
-        fontSize: 14,
-        rows: 30,
-        cols: 100,
-        scrollback: 10000, // Increase scrollback buffer
-        cursorStyle: 'underline', // Other options: 'block', 'bar'
-        theme: {
-            background: '#1e1e1e', // Dark background
-            foreground: '#ffffff', // White text
-            cursor: '#ffffff',
-            selection: '#44475a',
-            black: '#000000',
-            red: '#ff5555',
-            green: '#50fa7b',
-            yellow: '#f1fa8c',
-            blue: '#bd93f9',
-            magenta: '#ff79c6',
-            cyan: '#8be9fd',
-            white: '#f8f8f2',
-            brightBlack: '#6272a4',
-            brightRed: '#ff6e6e',
-            brightGreen: '#69ff94',
-            brightYellow: '#ffffa5',
-            brightBlue: '#d6acff',
-            brightMagenta: '#ff92df',
-            brightCyan: '#a4ffff',
-            brightWhite: '#ffffff',
-        },
+      cursorBlink: true,
+      fontSize: 14,
+      rows: 28,
+      cols: 100,
+      scrollback: 10000,
+      cursorStyle: 'block',
+      theme: { background: '#101114', foreground: '#e7e7ea', cursor: '#e7e7ea' },
     });
-
     const fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
+
     term.open(document.getElementById('terminal'));
     fitAddon.fit();
+    window.addEventListener('resize', () => fitAddon.fit());
 
-    window.addEventListener('resize', () => {
-        fitAddon.fit();
-    });
-
-    
     let socket = null;
+    const statusSpan = document.getElementById('status');
+    const actionsRoot = document.getElementById('actions_list');
+    const canRun = actionsRoot?.dataset?.canRun === '1';
 
-    const TETHER_ASCII_ART = ``
-
-
-    // Function to write ASCII art
-    function writeAsciiArt() {
-        term.writeln(TETHER_ASCII_ART);
-        term.writeln("TETHER by WOLFX!\r\n");
+    function setStatus(state) {
+      statusSpan.className = 'status-pill ' + (state === 'Connected' ? 'is-connected' : state === 'Error' ? 'is-error' : 'is-disconnected');
+      statusSpan.textContent = state;
     }
 
-    // Connect button creates WebSocket connection
+    function wsUrl() {
+      const host_id = "{{ host_id }}";
+      const websocket_url = "{{ websocket_url }}"; // e.g. wss://tether.wolfx.io
+      return `${websocket_url}/ws/ssh/${host_id}/`;
+    }
+
+    // Connect
     document.getElementById('connect_btn').addEventListener('click', function () {
-        // Dynamically get host_id from Django context
-        const host_id = "{{ host_id }}";
-        const websocket_url = "{{ websocket_url }}";  
-        // We expect websocket_url to be something like "wss://tether.wolfx.io"
-        // Construct the full URL: wss://tether.wolfx.io/ws/ssh/<host_id>/
-        const wsUrl = `${websocket_url}/ws/ssh/${host_id}/`;
+      if (socket && socket.readyState === WebSocket.OPEN) return;
 
-        //const wsUrl = `${wsProtocol}127.0.0.1:8080/ws/ssh/${host_id}/`;
-        //const wsUrl = `${wsProtocol}${window.location.host}/ws/ssh/${host_id}/`;
-        
-        const statusSpan = document.getElementById('status');
+      socket = new WebSocket(wsUrl());
 
-        socket = new WebSocket(wsUrl);
+      socket.onopen = function () {
+        term.writeln("TETHER by WOLFx\r\n");
+        term.writeln("Connection established.\r\n");
+        setStatus('Connected');
+        document.getElementById('kill_btn').disabled = false;
 
-        socket.onopen = function () {
+        // enable action buttons (view permission gate)
+        updateActionButtons();
+      };
 
-            writeAsciiArt(); // Inject ASCII art upon connection
-            term.write("Connection established.\r\n");
-            // Now that connection is open, we can start sending keystrokes
-            document.getElementById('kill_btn').disabled = false; // Enable Kill button
-            statusSpan.textContent = "Connected";
-            statusSpan.style.color = "green";
-        };
+      socket.onmessage = function (event) {
+        // Try JSON first (action/status), else treat as terminal text
+        try {
+          const payload = JSON.parse(event.data);
+          handleJson(payload);
+          return;
+        } catch (e) {
+          // not JSON -> terminal stream
+        }
+        term.write(event.data);
+      };
 
-        socket.onmessage = function (event) {
-            // Data from server is appended to terminal
-            term.write(event.data);
-        };
+      socket.onclose = function () {
+        term.write("\r\nConnection closed.\r\n");
+        document.getElementById('kill_btn').disabled = true;
+        setStatus('Disconnected');
+        disableRunningButtons(false); // reset run buttons
+      };
 
-        socket.onclose = function (event) {
-            term.write("\r\nConnection closed.\r\n");
-            document.getElementById('kill_btn').disabled = true; // Disable Kill button
-            statusSpan.textContent = "Disconnected";
-            statusSpan.style.color = "grey";
-        };
+      socket.onerror = function () {
+        setStatus('Error');
+      };
 
-        socket.onerror = function (error) {
-            term.write(`\r\nError: ${error.message}\r\n`);
-            statusSpan.textContent = "Error";
-            statusSpan.style.color = "red";
-        };
-
-        // When user types, send data to server as JSON
-        term.onData((data) => {
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                const message = JSON.stringify({ type: 'input', data: data });
-                socket.send(message);
-            }
-        });
-    });
-
-    // Kill button sends kill signal to server
-    document.getElementById('kill_btn').addEventListener('click', function () {
+      term.onData((data) => {
         if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: 'kill' }));
+          socket.send(JSON.stringify({ type: 'input', data }));
         }
+      });
     });
 
+    // Kill
+    document.getElementById('kill_btn').addEventListener('click', function () {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'kill' }));
+      }
+    });
 
-    // Optional: Handle socket closure from server side
-    function closeSocket() {
-        if (socket) {
-            socket.close();
-        }
+    // Actions UI wiring
+    function updateActionButtons() {
+      if (!actionsRoot) return;
+      actionsRoot.querySelectorAll('.action-row').forEach(row => {
+        const btn = row.querySelector('.run-btn');
+        if (!btn) return;
+        btn.disabled = !canRun || (socket?.readyState !== WebSocket.OPEN);
+        btn.onclick = () => runAction(row.dataset.id, row);
+      });
     }
 
-    window.addEventListener('beforeunload', closeSocket);
-</script>
+    function disableRunningButtons(disabled=true) {
+      actionsRoot?.querySelectorAll('.run-btn').forEach(b => { b.disabled = disabled; });
+    }
+
+    function setRowStatus(row, status) {
+      const chip = row.querySelector('[data-role="status"]');
+      chip.textContent = status;
+      chip.className = 'chip status-' + status;
+    }
+
+    function showTail(row, lines) {
+      const el = row.querySelector('[data-role="tail"]');
+      if (!el) return;
+      if (!lines || !lines.length) {
+        el.hidden = true;
+        el.textContent = '';
+        return;
+      }
+      el.hidden = false;
+      el.textContent = lines.join("\n");
+    }
+
+    function runAction(id, row) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      disableRunningButtons(true);
+      setRowStatus(row, 'running');
+      showTail(row, null);
+      socket.send(JSON.stringify({ type: 'run_action', action_id: Number(id) }));
+    }
+
+    function handleJson(payload) {
+      switch (payload.type) {
+        case 'action_status': {
+          const row = actionsRoot.querySelector(`.action-row[data-id="${payload.id}"]`);
+          if (row) {
+            setRowStatus(row, payload.status || 'running');
+            if (payload.tail) showTail(row, payload.tail);
+          }
+          break;
+        }
+        case 'action_result': {
+          const row = actionsRoot.querySelector(`.action-row[data-id="${payload.id}"]`);
+          if (row) {
+            const s = payload.status === 'success' ? 'idle' : (payload.status === 'failure' ? 'idle' : 'idle');
+            setRowStatus(row, s);
+            if (payload.tail) showTail(row, payload.tail);
+          }
+          disableRunningButtons(false);
+          break;
+        }
+        case 'action_denied':
+        case 'action_error': {
+          // surface a small inline error
+          const row = actionsRoot.querySelector(`.action-row[data-id="${payload.id}"]`);
+          if (row) {
+            setRowStatus(row, 'idle');
+            showTail(row, [payload.reason || payload.message || 'Error occurred.']);
+          }
+          disableRunningButtons(false);
+          break;
+        }
+        default:
+          // ignore unknown JSON types
+          break;
+      }
+    }
+
+    // initial state for buttons (before connection)
+    updateActionButtons();
+
+    // close socket on unload
+    window.addEventListener('beforeunload', () => { if (socket) socket.close(); });
+  </script>
+</body>
 </html>

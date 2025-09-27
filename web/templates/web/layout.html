@@ -15,15 +15,24 @@
     {%endif%}
 
     {%include 'web/dependencies.html'%}
+    <link rel="stylesheet" href="{%static 'web/css/main.css'%}">
+    <link rel="stylesheet" href="{%static 'web/css/style.css'%}">
 </head>
 
-<body>
+<body class="tether-body">
+    <div class="page-wrap">
+        <header class="topbar">
+            <div class="brand">TETHER</div>
+            <div class="btn-row">
+                <a href="{% url 'logout' %}" class="btn danger">Logout</a>
+            </div>
+        </header>
    
-    <main class="main">
-        {%block content%}
-        {%endblock%}
-    </main>
-
+        <main class="main">
+            {%block content%}
+            {%endblock%}
+        </main>
+    </div>
 </body>
 
 </html>

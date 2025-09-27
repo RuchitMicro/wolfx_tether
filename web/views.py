@@ -26,6 +26,7 @@ class IndexView(LoginRequiredMixin, TemplateView):
         # Filter hosts by checking if the user has 'view_host' permission on each
         # This ensures only permitted hosts are displayed to the logged-in user.
         permitted_hosts = [h for h in all_hosts if request.user.has_perm('view_host', h)]
+        permitted_hosts = [h for h in all_hosts if request.user.has_perm('web.view_host')]
 
         return render(request, 'web/index.html', {'hosts': permitted_hosts})
 
@@ -41,26 +42,44 @@ class LogoutView(LogoutView):
 
 
 
+from guardian.shortcuts import get_objects_for_user
+
 @login_required
 def terminal_view(request, host_id):
-    """
-    Display the terminal page for a given host.
-    Only allow this view if the user is logged in and has the 'view_host' permission
-    on that specific host instance.
-    """
     host = get_object_or_404(Host, pk=host_id)
 
-    # Check if the current logged-in user has 'view_host' permission on this host
-    if not request.user.has_perm('view_host', host):
-        return HttpResponseForbidden("You do not have the required permission to view this host.")
+    # Check host view permission
+    if not (request.user.has_perm('web.view_host', host) or request.user.has_perm('web.view_host')):
+        return HttpResponseForbidden("You do not have permission to view this host.")
 
-    return render(request, 'web/terminal.html', {'host_id': host_id, 'host': host,'websocket_url': settings.WEBSOCKET_URL})
+    # Fetch all actions for the host
+    actions_qs = ProjectAction.objects.filter(project__host=host).select_related('project')
 
+    # Filter actions by view permission (object-level)
+    actions_qs = get_objects_for_user(
+        request.user,
+        'web.view_projectaction',
+        klass=ProjectAction,
+        accept_global_perms=True  # model-level permission is OK too
+    ).filter(pk__in=actions_qs)
 
+    # Determine if user can run each action
+    actions = []
+    for action in actions_qs:
+        action.can_run = request.user.has_perm('web.can_run_actions', action) or request.user.has_perm('web.can_run_actions')
+        actions.append(action)
 
-
-
-
+    return render(
+        request,
+        'web/terminal.html',
+        {
+            'host_id': host_id,
+            'host': host,
+            'websocket_url': settings.WEBSOCKET_URL,
+            'actions': actions,
+            'can_run_actions': any(a.can_run for a in actions)  # for enabling run buttons
+        }
+    )
 
 
 

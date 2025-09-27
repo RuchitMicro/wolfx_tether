@@ -283,8 +283,10 @@ class Host(CommonModel):
         'list_display': ['name', 'host_address', 'port', 'username', 'use_credential','open_terminal'],
         'search_fields': ['name','host_address','port','username',],
         'list_filter': ['use_credential'],
-        'radio_fields'  :{"use_credential": admin.VERTICAL}
-        
+        'radio_fields'  :{"use_credential": admin.VERTICAL},
+        'inline': [
+            {'Project':'host'}
+        ]
     }
     
     def open_terminal(self):
@@ -402,6 +404,124 @@ def encrypt_host_credentials_before_save(sender, instance, **kwargs):
     if not instance.pem_file and not instance.encrypted_pem:
         instance.encrypted_pem = None
         
+class Project(CommonModel):
+    """
+    A logical deployment unit tied to a single Host.
+    One Host can have multiple Projects.
+    """
+    host            = models.ForeignKey(Host, on_delete=models.CASCADE, related_name='projects')
+    name            = models.CharField(max_length=200, unique=True)
+    description     = models.TextField(blank=True, null=True)
+
+    admin_meta = {
+        'list_display': ['name', 'host', 'open_terminal_for_host'],
+        'search_fields': ['name', 'host__name', 'host__host_address'],
+        'list_filter': ['host'],
+        'inline': [
+            {'ProjectAction':'project'},
+            {'ProjectSecret':'project'}
+        ]
+    }
+
+    def open_terminal_for_host(self):
+        url = reverse('terminal-view', args=[self.host_id])
+        return format_html(f'<a href="{url}" target="_blank">Open Host Terminal</a>')
+    open_terminal_for_host.short_description = "Action"
+
+    def __str__(self):
+        return f"{self.name} @ {self.host.host_address}"
+
+
+class ProjectAction(CommonModel):
+    """
+    Named action with a block of shell commands to execute on the Project's Host.
+    Commands run in a login shell (xterm/interactive) via your SSHConsumer.
+    """
+    project         = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='actions')
+    display_name    = models.CharField(max_length=200)
+    commands        = models.TextField(help_text="Shell commands. You can reference $ENV_VAR set by ProjectSecrets.")
+    status          = models.CharField(max_length=20, default='idle', choices=[('idle', 'Idle'), ('running', 'Running')])
+
+    admin_meta = {
+        'list_display': ['display_name', 'project',],
+        'search_fields': ['display_name', 'project__name',],
+        'list_filter': ['project'],
+        'rtf_exclude': ['commands',],
+        'readonly_fields': ['status',],
+    }
+
+
+    class Meta:
+        unique_together = [('project', 'display_name')]
+        permissions     = [
+            ("can_run_actions", "Can run project actions"),
+        ]
+
+    def __str__(self):
+        return f"{self.display_name} [{self.project.name}]"
+
+
+class ProjectSecret(CommonModel):
+    """
+    Write-only secret store:
+      - key: the ENV var name (e.g., 'DB_PASSWORD')
+      - encrypted_value: ciphertext (Fernet) for runtime export
+      - value_fingerprint: HMAC/SHA-256 for duplicate detection / integrity (non-reversible)
+    UX: You can create and delete secrets; updates are blocked to force rotation.
+    """
+    project             = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='secrets')
+    key                 = models.CharField(max_length=64, help_text="ENV var name (e.g., DB_PASSWORD). Uppercase A-Z, 0-9, and underscore.")
+    encrypted_value     = models.BinaryField(help_text="Ciphertext, decryptable only by server.", editable=False)
+    value_fingerprint   = models.CharField(max_length=64, editable=False)  # hex SHA-256 (or HMAC)
+
+    temp_value          = models.TextField(blank=True, null=True, help_text="Write-only. If set, it will be encrypted and then cleared after save.")
+
+    admin_meta = {
+        'list_display': ['key', 'project',],
+        'search_fields': ['key', 'project__name',],
+        'list_filter': ['project'],
+        'rtf_exclude': ['temp_value',],
+    }
+
+
+    class Meta:
+        unique_together = [('project', 'key')]
+
+    KEY_RE = re.compile(r'^[A-Z0-9_]+$')
+
+    def clean(self):
+        if not self.KEY_RE.match(self.key):
+            raise ValidationError("Secret key must be UPPERCASE letters, digits, or underscore only.")
+
+    @staticmethod
+    def _fernet():
+        secret      = settings.SECRET_KEY.encode('utf-8')
+        sha         = hashlib.sha256(secret).digest()
+        fernet_key  = base64.urlsafe_b64encode(sha)
+        return Fernet(fernet_key)
+
+    def save(self, *args, **kwargs):
+        # If a temp_value is provided on create/update, rotate the secret
+        if self.temp_value:
+            f = self._fernet()
+            plaintext               = self.temp_value
+            self.encrypted_value    = f.encrypt(plaintext.encode('utf-8'))
+            self.value_fingerprint  = hashlib.sha256(plaintext.encode('utf-8')).hexdigest()
+
+        super().save(*args, **kwargs)
+
+        # Immediately clear temp_value in DB (so it never persists)
+        if self.temp_value:
+            type(self).objects.filter(pk=self.pk).update(temp_value=None)
+            self.temp_value = None  # clear instance too
+
+    def decrypt_value(self) -> str:
+        f = self._fernet()
+        return f.decrypt(bytes(self.encrypted_value)).decode('utf-8')
+
+    def __str__(self):
+        return f"{self.key} (write-only) [{self.project.name}]"
+
 
 # Blog Models
 class BlogCategory(CommonModel):

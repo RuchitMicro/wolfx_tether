@@ -1,3 +1,4 @@
+
 @import url("https://fonts.googleapis.com/css2?family=Oxanium:wght@200..800&display=swap");
 html, body {
   margin: 0;
@@ -18,7 +19,7 @@ button {
   justify-content: center;
   align-items: center;
   height: 100vh;
-  color: white;
+  color: var(--text);
   box-shadow: 0 0 100vw 100px rgb(0, 0, 0) inset;
 }
 .login-container video {
@@ -135,8 +136,8 @@ button {
 }
 
 .server-container {
-  background-color: black;
-  color: white;
+  background-color: var(--bg);
+  color: var(--text);
   height: 100vh;
   padding: 20px;
 }
@@ -151,10 +152,119 @@ button {
   padding: 10px 0px;
 }
 .server-container table td a {
-  color: white;
-  border: 2px solid green;
+  color: var(--text);
+  border: 2px solid var(--ok);
   padding: 7px 10px;
 }
 .server-container table summary {
   cursor: pointer;
-}/*# sourceMappingURL=style.css.map */
+}
+
+/* =========================
+   APPENDED: Rectangular/Aesthetic Terminal UI
+   Safe: New classes only, no overrides to your existing styles.
+   ========================= */
+:root{
+  --bg:#0b0c10;
+  --card:#15171d;
+  --muted:#8a8f98;
+  --line:#22252e;
+  --ok:#2ecc71;
+  --warn:#f39c12;
+  --err:#e74c3c;
+  --text:#e7e7ea;
+  --chip:#2a2e37;
+  --chip-text:#cdd2db;
+  --btn:#1f222b;
+  --btn-hover:#2a2e39;
+  --primary:#4c8bf5;
+  --danger:#ef4444;
+}
+
+body.tether-body{
+  background:var(--bg);
+  color:var(--text);
+  font:14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+}
+
+.page-wrap{max-width:1200px;margin:24px auto;padding:0 16px}
+
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;border:1px solid var(--line);background:var(--card);
+  border-radius:14px;margin-bottom:16px
+}
+.topbar .brand{font-weight:600;letter-spacing:.3px}
+.status-pill{
+  padding:4px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px
+}
+.status-pill.is-connected{background:rgba(46,204,113,.15);color:var(--ok);border-color:rgba(46,204,113,.35)}
+.status-pill.is-disconnected{background:#171a20;color:#9197a1}
+.status-pill.is-error{background:rgba(231,76,60,.12);color:var(--err);border-color:rgba(231,76,60,.3)}
+
+.grid{
+  display:grid;grid-template-columns: 1.6fr .9fr;gap:16px
+}
+@media (max-width:1000px){
+  .grid{grid-template-columns:1fr}
+}
+
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:16px;
+  box-shadow:0 8px 24px rgba(0,0,0,.25);
+}
+
+.card-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 16px;border-bottom:1px solid var(--line)
+}
+.card-header h2,.card-header h3{margin:0;font-size:16px}
+.card-header .muted{margin:2px 0 0;color:var(--muted);font-size:12px}
+
+.btn-row{display:flex;gap:8px}
+.btn{
+  border:1px solid var(--line);background:var(--btn);color:var(--text);
+  padding:8px 12px;border-radius:10px;cursor:pointer;font-weight:600
+}
+.btn:hover{background:var(--btn-hover)}
+.btn.primary{background:linear-gradient(180deg,#335fd6,#244bb4);border-color:#203e90}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.danger{background:linear-gradient(180deg,#d34a4a,#b43838);border-color:#8d2a2a}
+.btn.tiny{padding:6px 10px;font-size:12px}
+
+.terminal-card .terminal{
+  height:490px;padding:10px;border-radius:0 0 16px 16px;
+  /* If you mount xterm here, also ensure #terminal fits: */
+  background:#101114;
+}
+
+.actions-card .actions-list{padding:8px 8px 12px}
+.action-row{
+  display:grid;grid-template-columns:1fr auto;gap:8px;
+  padding:10px;border:1px solid var(--line);border-radius:12px;background:#12141a;margin:8px 0
+}
+.action-row .meta .name{font-weight:600}
+.action-row .meta .sub{font-size:12px;color:var(--muted)}
+.action-row .controls{display:flex;align-items:center;gap:8px}
+.chip{
+  background:var(--chip);color:var(--chip-text);padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid #343a46
+}
+.chip.status-running{background:rgba(76,139,245,.12);color:#9dbbf9;border-color:#3a60a8}
+.chip.status-idle{background:#151922;color:#b8bfca}
+.tail{
+  grid-column:1 / -1;background:#0e1015;border:1px dashed #2b2f37;margin-top:8px;
+  padding:8px;border-radius:10px;white-space:pre-wrap;max-height:160px;overflow:auto;
+  font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size:12px;color:#d5d8de
+}
+
+.host-card{margin-top:16px}
+.host-card h4{margin:0;padding:12px 16px;border-bottom:1px solid var(--line)}
+.host-card .kv{padding:12px 16px;display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.host-card .kv .full{grid-column:1/-1}
+.host-card .kv > div{
+  display:flex;justify-content:space-between;gap:16px;background:#12141a;border:1px solid var(--line);
+  border-radius:10px;padding:8px 10px
+}
+.host-card .kv > div > span:first-child{color:var(--muted)}
+/*# sourceMappingURL=style.css.map */

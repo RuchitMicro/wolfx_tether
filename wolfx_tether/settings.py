@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 import os
 from pathlib import Path
+from dotenv  import load_dotenv
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,10 +23,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-9)3dgg7ca0(0j+w6)dgb&w6kn*@3j1b=qbru#!4-5)ur#ni3%c'
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 'yes')
 
 if DEBUG == True:
     WEBSOCKET_URL = "ws://127.0.0.1:8080"
@@ -233,12 +235,6 @@ UNFOLD = {
                         "permission": lambda request: request.user.is_superuser,
                     },
                     {
-                        "title": ("Host"),
-                        "icon": "dns",
-                        "link": reverse_lazy("admin:web_host_changelist"),
-                        "permission": lambda request: request.user.has_perm("web.view_host"),
-                    },
-                    {
                         "title": ("SiteSetting"),
                         "icon": "settings",
                         "link": reverse_lazy("admin:web_sitesetting_changelist"),
@@ -269,6 +265,21 @@ UNFOLD = {
                         "permission": lambda request: request.user.has_perm("web.view_contact"),
                     },
                 ],
+            },
+            {
+                "title": ("Server Management"),
+                "separator": True,
+                "items": [
+                    {
+                        "title": ("Host"),
+                        "icon": "computer",
+                        "link" : reverse_lazy("admin:web_host_changelist"),
+                    },
+                    {
+                        "title": ("Project"),
+                        "icon": "folder",
+                        "link" : reverse_lazy("admin:web_project_changelist"),
+                    }]
             },
             {
                 "title": ("Authentication and Authorization"),

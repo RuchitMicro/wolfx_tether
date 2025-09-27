@@ -11,6 +11,7 @@
     <link rel="icon" type="image/x-icon"
         href="{%if setting.favicon%}{{setting.favicon.url|default_if_none:''|default:''}}{%endif%}">
     {%load static%}
+    <link rel="stylesheet" href="{% static 'web/css/style.css' %}">
 
     {{setting.global_head|safe}}
 
@@ -22,7 +23,7 @@
 
 </head>
 
-<body>
+<body class="tether-body">
 
     <div class="login-container">
         <video src="{%static 'web/video/bg-2.mp4'%}" autoplay muted loop></video>
@@ -34,7 +35,7 @@
                 <table>
                     {{ form.as_table }}
                 </table>
-                <button type="submit">Log In</button>
+                <button type="submit" class="btn primary">Log In</button>
             </form>
         </div>
     </div>

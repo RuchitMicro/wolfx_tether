@@ -3,11 +3,25 @@
 
 <head>
     <title>Logged Out</title>
+    {%load static%}
+    <link rel="stylesheet" href="{%static 'web/css/style.css'%}">
 </head>
 
-<body>
-    <h1>You have successfully logged out.</h1>
-    <a href="{% url 'login' %}">Log in again?</a>
+<body class="tether-body">
+    <div class="page-wrap">
+        <header class="topbar">
+            <div class="brand">TETHER</div>
+        </header>
+        <main class="card">
+            <div class="card-header">
+                <h2>Logged Out</h2>
+            </div>
+            <div style="padding: 16px;">
+                <p>You have successfully logged out.</p>
+                <a href="{% url 'login' %}" class="btn primary">Log in again?</a>
+            </div>
+        </main>
+    </div>
 </body>
 
 </html>
