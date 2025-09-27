@@ -274,11 +274,13 @@ UNFOLD = {
                         "title": ("Host"),
                         "icon": "computer",
                         "link" : reverse_lazy("admin:web_host_changelist"),
+                        "permission": lambda request: request.user.has_perm("web.view_host"),
                     },
                     {
                         "title": ("Project"),
                         "icon": "folder",
                         "link" : reverse_lazy("admin:web_project_changelist"),
+                        "permission": lambda request: request.user.has_perm("web.view_project"),
                     }]
             },
             {

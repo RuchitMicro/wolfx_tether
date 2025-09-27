@@ -33,20 +33,18 @@ class SSHConsumer(AsyncWebsocketConsumer):
     host = None
 
     async def connect(self):
+        await self.accept()
         host_id = self.scope['url_route']['kwargs'].get('host_id')
         if not host_id:
-            await self.accept()
             await self.send_text_to_client("Error: No host ID specified.")
             await self.close()
             return
 
-        if not getattr(self.scope.get('user'), 'is_authenticated', False):
-            await self.accept()
+        if not self.scope['user'].is_authenticated:
             await self.send_text_to_client("Error: You must be authenticated to access this host.")
             await self.close()
             return
 
-        await self.accept()
 
         # Load host safely
         try:
@@ -137,6 +135,7 @@ class SSHConsumer(AsyncWebsocketConsumer):
                         await self.send_text_to_client(f"\r\nError writing to SSH channel: {e}\r\n")
             elif mtype == 'kill':
                 await self.kill_ssh_connection()
+                await self.disconnect()
             elif mtype == 'run_action':
                 action_id = message.get('action_id')
                 await self.handle_run_action(action_id)
