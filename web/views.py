@@ -49,7 +49,7 @@ def terminal_view(request, host_id):
     host = get_object_or_404(Host, pk=host_id)
 
     # Check host view permission
-    if not (request.user.has_perm('web.view_host', host) or request.user.has_perm('web.view_host')):
+    if not (request.user.has_perm('view_host', host) or request.user.has_perm('web.view_host')):
         return HttpResponseForbidden("You do not have permission to view this host.")
 
     # Fetch all actions for the host
