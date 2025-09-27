@@ -469,3 +469,16 @@ class SSHConsumer(AsyncWebsocketConsumer):
                     action_ssh.close()
             except Exception:
                 pass
+
+            try:
+                if not locals().get('sent_final_result', False):
+                    async_to_sync(self.send_json_to_client)({
+                        'type': 'action_result',
+                        'id': action_id,
+                        'status': 'failure',
+                        'tail': ['Action terminated unexpectedly.']
+                    }) 
+            except Exception:
+                pass
+
+
