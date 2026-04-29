@@ -3,62 +3,51 @@
 
 {%block content%}
 
-<section class="server-container">
-    <div class="left">
-        <h1>Available Hosts.</h1>
-        <table>
+<div class="server-container">
+    <div class="server-header">
+        <h1>Available Hosts</h1>
+        <p>{{ hosts|length }} host{{ hosts|length|pluralize }} configured</p>
+    </div>
+
+    <div class="hosts-table-wrap">
+        <table class="hosts-table">
             <thead>
                 <tr>
-                    <th width="2%"></th>
-                    <th width="20%">Name</th>
-                    <th width="40%">Host Address</th>
-                    <th width="18%">Port</th>
-                    <th width="20%">Username</th>
-                    <th width="0%"></th>
+                    <th class="idx">#</th>
+                    <th>Name</th>
+                    <th>Address</th>
+                    <th>Port</th>
+                    <th>User</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
-            {% for host in hosts %}
+                {% for host in hosts %}
                 <tr>
-                    <td>
-                        {{ forloop.counter }}.
-                    </td>
-                    <td>
-                        {%if host.description%}
+                    <td class="idx">{{ forloop.counter }}</td>
+                    <td class="host-name">
+                        {% if host.description %}
                         <details>
                             <summary>{{ host.name }}</summary>
-                            <p style="font-size: 12px;">
-                                {{ host.description|default:"N/A" }}
-                            </p>
+                            <p>{{ host.description|default:"N/A" }}</p>
                         </details>
-                        {%else%}
+                        {% else %}
                             {{ host.name }}
-                        {%endif%}
-
+                        {% endif %}
                     </td>
+                    <td class="host-addr">{{ host.host_address }}</td>
+                    <td class="host-port">{{ host.port }}</td>
+                    <td class="host-user">{{ host.username }}</td>
                     <td>
-                        {{ host.host_address }}
-                    </td>
-                    <td>
-                        {{ host.port }}
-                    </td>
-                    <td>
-                        {{ host.username }}
-                    </td>
-                    <td>
-                        <a href="{% url 'terminal-view' host_id=host.id %}" target="_blank">Connect</a>
+                        <a href="{% url 'terminal-view' host_id=host.id %}" target="_blank" class="connect-btn">
+                            Connect
+                        </a>
                     </td>
                 </tr>
-            {% endfor %}
-
+                {% endfor %}
             </tbody>
         </table>
     </div>
-    <div class="right">
-        <div id="terminal-container"></div>
-    </div>
-</section>
-
-<script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+</div>
 
 {%endblock%}

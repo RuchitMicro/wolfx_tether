@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html>
-
 <head>
-    <title>Logged Out</title>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TETHER — Logged Out</title>
     {%load static%}
-    <link rel="stylesheet" href="{%static 'web/css/style.css'%}">
+    <link rel="stylesheet" href="{%static 'web/css/tether.css'%}">
 </head>
 
 <body class="tether-body">
@@ -12,16 +14,19 @@
         <header class="topbar">
             <div class="brand">TETHER</div>
         </header>
-        <main class="card">
-            <div class="card-header">
-                <h2>Logged Out</h2>
+
+        <div class="logout-wrap">
+            <div class="logout-card">
+                <div class="logout-card-brand">
+                    <h1>TETHER</h1>
+                    <p>Session ended</p>
+                </div>
+                <div class="logout-card-body">
+                    <p>You have been securely logged out. Your session has been terminated.</p>
+                    <a href="{% url 'login' %}" class="btn primary">Sign in again</a>
+                </div>
             </div>
-            <div style="padding: 16px;">
-                <p>You have successfully logged out.</p>
-                <a href="{% url 'login' %}" class="btn primary">Log in again?</a>
-            </div>
-        </main>
+        </div>
     </div>
 </body>
-
 </html>

@@ -16,43 +16,33 @@ logger = logging.getLogger(__name__)
 
 
 class SSHConsumer(AsyncWebsocketConsumer):
-    """
-    WebSocket SSH terminal + action runner.
-
-    - Terminal uses one SSHClient (interactive).
-    - Each action uses its own SSHClient and PTY-backed shell (separate).
-    - All DB/permission access from async paths is wrapped with database_sync_to_async.
-    """
-
-    ssh_client = None
-    ssh_channel = None
-    output_thread = None
-    keep_running = True
-    host = None
+    def _init_state(self):
+        self.ssh_client = None
+        self.ssh_channel = None
+        self.output_thread = None
+        self.keep_running = False
+        self.host = None
 
     async def connect(self):
-        await self.accept()
+        self._init_state()
+
         host_id = self.scope['url_route']['kwargs'].get('host_id')
         if not host_id:
-            
-            await self.send_text_to_client("Error: No host ID specified.")
-            await self.close()
+            await self.close(code=4400)
             return
 
         if not getattr(self.scope.get('user'), 'is_authenticated', False):
-            await self.send_text_to_client("Error: You must be authenticated to access this host.")
-            await self.close()
+            await self.close(code=4401)
             return
 
-        # Load host safely
         try:
             self.host = await self.get_host(host_id)
         except Exception:
-            await self.send_text_to_client("Error: Unable to fetch host details.")
-            await self.close()
+            await self.close(code=4404)
             return
 
-        # Establish the interactive terminal session
+        await self.accept()
+
         try:
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -60,9 +50,11 @@ class SSHConsumer(AsyncWebsocketConsumer):
             if self.host.use_credential == 'pem':
                 decrypted_pem = self.host.decrypt_pem(self.host.encrypted_pem)
                 if not decrypted_pem:
-                    raise ValueError("Decryption of PEM file failed.")
+                    raise ValueError("PEM decryption failed.")
+
                 file_obj = io.StringIO(decrypted_pem.decode('utf-8'))
                 from paramiko import Ed25519Key, RSAKey, SSHException
+
                 try:
                     pkey = Ed25519Key.from_private_key(file_obj)
                 except SSHException:
@@ -76,6 +68,7 @@ class SSHConsumer(AsyncWebsocketConsumer):
                     pkey=pkey,
                     timeout=30,
                 )
+
             elif self.host.use_credential == 'password':
                 decrypted_password = self.host.decrypt_password(self.host.password)
                 self.ssh_client.connect(
@@ -86,86 +79,96 @@ class SSHConsumer(AsyncWebsocketConsumer):
                     timeout=30,
                 )
             else:
-                raise ValueError("Invalid credential type specified.")
+                raise ValueError("Invalid credential type.")
 
-            # Interactive terminal channel (separate from action sessions)
-            self.ssh_channel = self.ssh_client.invoke_shell(term='xterm')
+            # Start with a sane default; the browser will immediately resize it.
+            self.ssh_channel = self.ssh_client.invoke_shell(term='xterm', width=80, height=24)
             self.ssh_channel.settimeout(0.0)
 
             self.keep_running = True
             self.output_thread = threading.Thread(target=self.read_ssh_output, daemon=True)
             self.output_thread.start()
 
-            logger.info(f"SSH terminal connected to {self.host.host_address} (user={self.scope['user']})")
+            logger.info("SSH terminal connected host_id=%s user=%s", host_id, self.scope['user'])
 
         except Exception as e:
-            logger.error(f"SSH terminal connect failed (host_id={host_id}): {e}", exc_info=True)
-            await self.close()
-            raise
+            logger.error("SSH terminal connect failed host_id=%s: %s", host_id, e, exc_info=True)
+            await self.close(code=1011)
 
     async def disconnect(self, close_code):
         self.keep_running = False
+
         try:
             if self.ssh_channel is not None:
                 self.ssh_channel.close()
         except Exception:
             pass
+
         try:
             if self.ssh_client is not None:
                 self.ssh_client.close()
         except Exception:
             pass
-        logger.info(f"SSH terminal closed (user={self.scope['user']}, code={close_code})")
+
+        logger.info("SSH terminal closed user=%s code=%s", self.scope.get('user'), close_code)
 
     async def receive(self, text_data=None, bytes_data=None):
         if not text_data:
             return
 
-        # Control messages first
         try:
             message = json.loads(text_data)
-            mtype = message.get('type')
-            if mtype == 'input':
-                data = message.get('data', '')
-                if self.ssh_channel is not None:
-                    try:
-                        self.ssh_channel.send(data)
-                    except Exception as e:
-                        await self.send_text_to_client(f"\r\nError writing to SSH channel: {e}\r\n")
-            elif mtype == 'kill':
-                await self.kill_ssh_connection()
-            elif mtype == 'run_action':
-                action_id = message.get('action_id')
-                await self.handle_run_action(action_id)
-            else:
-                await self.send_text_to_client("Error: Unknown message type.")
-            return
         except json.JSONDecodeError:
-            pass
+            # fallback raw data
+            if self.ssh_channel is not None:
+                try:
+                    self.ssh_channel.send(text_data)
+                except Exception as e:
+                    await self.send_text_to_client(f"\r\nError writing to SSH channel: {e}\r\n")
+            return
 
-        # Raw keystrokes to terminal
-        if self.ssh_channel is not None:
-            try:
-                self.ssh_channel.send(text_data)
-            except Exception as e:
-                await self.send_text_to_client(f"\r\nError writing to SSH channel: {e}\r\n")
+        mtype = message.get('type')
+
+        if mtype == 'input':
+            data = message.get('data', '')
+            if self.ssh_channel is not None:
+                try:
+                    self.ssh_channel.send(data)
+                except Exception as e:
+                    await self.send_text_to_client(f"\r\nError writing to SSH channel: {e}\r\n")
+
+        elif mtype == 'resize':
+            cols = int(message.get('cols') or 0)
+            rows = int(message.get('rows') or 0)
+            if self.ssh_channel is not None and cols > 0 and rows > 0:
+                try:
+                    self.ssh_channel.resize_pty(width=cols, height=rows)
+                except Exception as e:
+                    logger.warning("PTY resize failed: %s", e)
+
+        elif mtype == 'kill':
+            await self.kill_ssh_connection()
+
+        elif mtype == 'run_action':
+            action_id = message.get('action_id')
+            await self.handle_run_action(action_id)
+
+        else:
+            await self.send_text_to_client("Error: Unknown message type.")
 
     def read_ssh_output(self):
-        """Read interactive terminal output and stream to client."""
         while self.keep_running and self.ssh_channel is not None and not self.ssh_channel.closed:
             try:
                 if self.ssh_channel.recv_ready():
                     chunk = self.ssh_channel.recv(4096)
                     if chunk:
-                        async_to_sync(self.send_text_to_client)(chunk.decode('utf-8', errors='replace'))
-                time.sleep(0.02)
+                        async_to_sync(self.send_text_to_client)(
+                            chunk.decode('utf-8', errors='replace')
+                        )
+                time.sleep(0.01)
             except Exception as e:
-                logger.error(f"Terminal read error: {e}")
+                logger.error("Terminal read error: %s", e)
                 break
-
-    # ---------------------------
-    # DB + permission (async-safe)
-    # ---------------------------
 
     @staticmethod
     @database_sync_to_async
@@ -175,9 +178,6 @@ class SSHConsumer(AsyncWebsocketConsumer):
     @staticmethod
     @database_sync_to_async
     def get_action_minimal(action_id):
-        """
-        Return minimal IDs only to avoid lazy relation access in async code.
-        """
         pa = get_object_or_404(
             ProjectAction.objects.select_related('project__host').only(
                 'id', 'project_id', 'project__host_id'
@@ -191,19 +191,11 @@ class SSHConsumer(AsyncWebsocketConsumer):
     def user_has_perm(user, perm_codename):
         return user.has_perm(perm_codename)
 
-    # ---------------------------
-    # Send helpers
-    # ---------------------------
-
     async def send_text_to_client(self, message: str):
         await self.send(text_data=message)
 
     async def send_json_to_client(self, data: dict):
         await self.send(text_data=json.dumps(data))
-
-    # ---------------------------
-    # Control handlers
-    # ---------------------------
 
     async def kill_ssh_connection(self):
         self.keep_running = False
@@ -217,9 +209,9 @@ class SSHConsumer(AsyncWebsocketConsumer):
                 self.ssh_client.close()
         except Exception:
             pass
+
         await self.send_text_to_client("\r\nSSH connection terminated by user.\r\n")
         await self.close()
-        logger.info(f"SSH terminal terminated by user (user={self.scope['user']})")
 
     async def handle_run_action(self, action_id):
         """

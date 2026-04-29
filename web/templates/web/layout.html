@@ -4,19 +4,15 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WOLFx: IT Company</title>
+    <title>TETHER</title>
     <link rel="icon" type="image/x-icon" href="{%if setting.favicon%}{{setting.favicon.url|default_if_none:''|default:''}}{%endif%}">
     {%load static%}
 
     {{setting.global_head|safe}}
-
-    {%if local_head%}
-        {{local_head.head|safe}}
-    {%endif%}
+    {%if local_head%}{{local_head.head|safe}}{%endif%}
 
     {%include 'web/dependencies.html'%}
-    <link rel="stylesheet" href="{%static 'web/css/main.css'%}">
-    <link rel="stylesheet" href="{%static 'web/css/style.css'%}">
+    <link rel="stylesheet" href="{%static 'web/css/tether.css'%}">
 </head>
 
 <body class="tether-body">
@@ -27,12 +23,11 @@
                 <a href="{% url 'logout' %}" class="btn danger">Logout</a>
             </div>
         </header>
-   
+
         <main class="main">
             {%block content%}
             {%endblock%}
         </main>
     </div>
 </body>
-
 </html>

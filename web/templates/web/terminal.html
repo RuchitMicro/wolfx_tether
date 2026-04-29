@@ -1,53 +1,59 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <meta charset="UTF-8">
-    <title>SSH Terminal</title>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TETHER — {{ host.name|default:"Terminal" }}</title>
     {% load static %}
-
-    <!-- Include xterm.js CSS -->
     <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
-
-    <link rel="stylesheet" href="{%static 'web/css/main.css'%}">
-    <link rel="stylesheet" href="{%static 'web/css/style.css'%}">
-
+    <link rel="stylesheet" href="{% static 'web/css/tether.css' %}">
 </head>
 
 <body class="tether-body">
-
   <div class="page-wrap">
+
     <header class="topbar">
-      <div class="brand">TETHER • Host Terminal</div>
-      <div class="status">Status: <span id="status" class="status-pill is-disconnected">Disconnected</span></div>
+      <div class="topbar-left">
+        <div class="brand">TETHER</div>
+
+        <a href="{% url 'index' %}" class="btn ghost">
+          Home
+        </a>
+      </div>
+
+      <div class="topbar-right">
+        <div class="status">
+          Status:
+          <span id="status" class="status-pill is-disconnected">Disconnected</span>
+        </div>
+
+        <a href="{% url 'logout' %}" class="btn danger">
+          Logout
+        </a>
+      </div>
     </header>
 
     <main class="grid">
-      <!-- Left: Terminal Card -->
+
       <section class="card terminal-card">
         <div class="card-header">
           <div>
             <h2>{{ host.name|default:"Host" }}</h2>
-            <p class="muted">{{ host.host_address }} · {{ host.username }} · Port {{ host.port }}</p>
+            <p class="mono muted">{{ host.host_address }} · {{ host.username }} · :{{ host.port }}</p>
           </div>
           <div class="btn-row">
-            <button id="connect_btn" class="btn primary">
-              <span>Connect</span>
-            </button>
+            <button id="connect_btn" class="btn primary">Connect</button>
             <button id="kill_btn" class="btn danger" disabled>Kill</button>
           </div>
         </div>
-
-        <div id="terminal" class="terminal"></div>
+        <div id="terminal"></div>
       </section>
 
-      <!-- Right: Actions Card -->
       <aside class="card actions-card">
         <div class="card-header">
           <h3>Project Actions</h3>
           {% if can_run_actions %}
-            <span class="badge ok">You can run actions</span>
+            <span class="badge ok">Can run</span>
           {% else %}
             <span class="badge warn" title="Ask an admin to grant 'can_run_actions'">View only</span>
           {% endif %}
@@ -57,13 +63,17 @@
           {% if actions %}
             {% for a in actions %}
               <div class="action-row" data-id="{{ a.id }}">
-                <div class="meta">
-                  <div class="name">{{ a.display_name }}</div>
-                  <div class="sub">{{ a.project.name }}</div>
-                </div>
-                <div class="controls">
-                  <span class="chip status-{{ a.status|default:'idle' }}" data-role="status">{{ a.status|default:"idle" }}</span>
-                  <button class="btn tiny run-btn" {% if not a.can_run %}disabled{% endif %}>Run</button>
+                <div class="action-row-inner">
+                  <div class="meta">
+                    <div class="name">{{ a.display_name }}</div>
+                    <div class="sub">{{ a.project.name }}</div>
+                  </div>
+                  <div class="controls">
+                    <span class="chip status-{{ a.status|default:'idle' }}" data-role="status">
+                      {{ a.status|default:"idle" }}
+                    </span>
+                    <button class="btn tiny" {% if not a.can_run %}disabled{% endif %}>Run</button>
+                  </div>
                 </div>
                 <div class="tail" data-role="tail" hidden></div>
               </div>
@@ -73,9 +83,9 @@
           {% endif %}
         </div>
       </aside>
+
     </main>
 
-    <!-- Host facts -->
     <section class="card host-card">
       <h4>Host Details</h4>
       <div class="kv">
@@ -83,118 +93,102 @@
         <div><span>Address</span><span>{{ host.host_address }}</span></div>
         <div><span>Port</span><span>{{ host.port }}</span></div>
         <div><span>User</span><span>{{ host.username }}</span></div>
-        <div class="full"><span>Description</span><span>{{ host.description|default:"—" }}</span></div>
+        {% if host.description %}
+        <div class="full"><span>Description</span><span>{{ host.description }}</span></div>
+        {% endif %}
       </div>
     </section>
+
   </div>
 
-  <!-- xterm -->
   <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
   <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
 
   <script>
-    const term = new Terminal({
-      cursorBlink: true,
-      fontSize: 14,
-      rows: 28,
-      cols: 100,
-      scrollback: 10000,
-      cursorStyle: 'block',
-      theme: { background: '#101114', foreground: '#e7e7ea', cursor: '#e7e7ea' },
-    });
-    const fitAddon = new FitAddon.FitAddon();
-    term.loadAddon(fitAddon);
-
-    term.open(document.getElementById('terminal'));
-    fitAddon.fit();
-    window.addEventListener('resize', () => fitAddon.fit());
-
-    let socket = null;
+    const connectBtn = document.getElementById('connect_btn');
+    const killBtn = document.getElementById('kill_btn');
     const statusSpan = document.getElementById('status');
     const actionsRoot = document.getElementById('actions_list');
     const canRun = actionsRoot?.dataset?.canRun === '1';
 
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: 13,
+      fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+      scrollback: 10000,
+      cursorStyle: 'block',
+      convertEol: false,
+      theme: {
+        background: '#0a0b0d',
+        foreground: '#e8eaf0',
+        cursor: '#4f8ef7',
+        cursorAccent: '#0a0b0d',
+        selectionBackground: 'rgba(79,142,247,0.25)',
+        black: '#1a1d24',
+        red: '#f56565',
+        green: '#3ecf8e',
+        yellow: '#f6ad55',
+        blue: '#4f8ef7',
+        magenta: '#b57bee',
+        cyan: '#38bdf8',
+        white: '#e8eaf0',
+        brightBlack: '#555a6e',
+        brightRed: '#fc8181',
+        brightGreen: '#68d391',
+        brightYellow: '#fbd38d',
+        brightBlue: '#63b3ed',
+        brightMagenta: '#c4b5fd',
+        brightCyan: '#67e8f9',
+        brightWhite: '#f7fafc',
+      },
+    });
+
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(document.getElementById('terminal'));
+
+    let socket = null;
+    let isConnected = false;
+    let isConnecting = false;
+    let connectionToken = 0;
+
     function setStatus(state) {
-      statusSpan.className = 'status-pill ' + (state === 'Connected' ? 'is-connected' : state === 'Error' ? 'is-error' : 'is-disconnected');
+      statusSpan.className = 'status-pill ' + (
+        state === 'Connected'  ? 'is-connected' :
+        state === 'Connecting' ? 'is-connecting' :
+        state === 'Error'      ? 'is-error' :
+                                 'is-disconnected'
+      );
       statusSpan.textContent = state;
+    }
+
+    function setUiState() {
+      connectBtn.disabled = isConnected || isConnecting;
+      killBtn.disabled = !isConnected;
+      updateActionButtons();
     }
 
     function wsUrl() {
       const host_id = "{{ host_id }}";
-      const websocket_url = "{{ websocket_url }}"; // e.g. wss://tether.wolfx.io
+      const websocket_url = "{{ websocket_url }}";
       return `${websocket_url}/ws/ssh/${host_id}/`;
     }
 
-    // Connect
-    document.getElementById('connect_btn').addEventListener('click', function () {
-      if (socket && socket.readyState === WebSocket.OPEN) return;
+    function sendResize() {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
-      socket = new WebSocket(wsUrl());
+      fitAddon.fit();
 
-      socket.onopen = function () {
-        term.writeln("TETHER by WOLFx\r\n");
-        term.writeln("Connection established.\r\n");
-        setStatus('Connected');
-        document.getElementById('kill_btn').disabled = false;
-
-        // enable action buttons (view permission gate)
-        updateActionButtons();
-      };
-
-      socket.onmessage = function (event) {
-        // Try JSON first (action/status), else treat as terminal text
-        try {
-          const payload = JSON.parse(event.data);
-          handleJson(payload);
-          return;
-        } catch (e) {
-          // not JSON -> terminal stream
-        }
-        term.write(event.data);
-      };
-
-      socket.onclose = function () {
-        term.write("\r\nConnection closed.\r\n");
-        document.getElementById('kill_btn').disabled = true;
-        setStatus('Disconnected');
-        disableRunningButtons(false); // reset run buttons
-      };
-
-      socket.onerror = function () {
-        setStatus('Error');
-      };
-
-      term.onData((data) => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: 'input', data }));
-        }
-      });
-    });
-
-    // Kill
-    document.getElementById('kill_btn').addEventListener('click', function () {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'kill' }));
-      }
-    });
-
-    // Actions UI wiring
-    function updateActionButtons() {
-      if (!actionsRoot) return;
-      actionsRoot.querySelectorAll('.action-row').forEach(row => {
-        const btn = row.querySelector('.run-btn');
-        if (!btn) return;
-        btn.disabled = !canRun || (socket?.readyState !== WebSocket.OPEN);
-        btn.onclick = () => runAction(row.dataset.id, row);
-      });
-    }
-
-    function disableRunningButtons(disabled=true) {
-      actionsRoot?.querySelectorAll('.run-btn').forEach(b => { b.disabled = disabled; });
+      socket.send(JSON.stringify({
+        type: 'resize',
+        cols: term.cols,
+        rows: term.rows,
+      }));
     }
 
     function setRowStatus(row, status) {
       const chip = row.querySelector('[data-role="status"]');
+      if (!chip) return;
       chip.textContent = status;
       chip.className = 'chip status-' + status;
     }
@@ -202,47 +196,72 @@
     function showTail(row, lines) {
       const el = row.querySelector('[data-role="tail"]');
       if (!el) return;
+
       if (!lines || !lines.length) {
         el.hidden = true;
         el.textContent = '';
         return;
       }
+
       el.hidden = false;
-      el.textContent = lines.join("\n");
+      el.textContent = lines.join('\n');
+    }
+
+    function disableRunningButtons(disabled = true) {
+      actionsRoot?.querySelectorAll('.btn.tiny').forEach(btn => {
+        btn.disabled = disabled || !canRun || !isConnected;
+      });
+    }
+
+    function updateActionButtons() {
+      if (!actionsRoot) return;
+
+      actionsRoot.querySelectorAll('.action-row').forEach(row => {
+        const btn = row.querySelector('.btn.tiny');
+        if (!btn) return;
+
+        btn.disabled = !canRun || !isConnected;
+        btn.onclick = () => runAction(row.dataset.id, row);
+      });
     }
 
     function runAction(id, row) {
-      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      if (!socket || socket.readyState !== WebSocket.OPEN || !canRun) return;
+
       disableRunningButtons(true);
       setRowStatus(row, 'running');
       showTail(row, null);
-      socket.send(JSON.stringify({ type: 'run_action', action_id: Number(id) }));
+
+      socket.send(JSON.stringify({
+        type: 'run_action',
+        action_id: Number(id),
+      }));
     }
 
     function handleJson(payload) {
       switch (payload.type) {
         case 'action_status': {
-          const row = actionsRoot.querySelector(`.action-row[data-id="${payload.id}"]`);
+          const row = actionsRoot?.querySelector(`.action-row[data-id="${payload.id}"]`);
           if (row) {
             setRowStatus(row, payload.status || 'running');
             if (payload.tail) showTail(row, payload.tail);
           }
           break;
         }
+
         case 'action_result': {
-          const row = actionsRoot.querySelector(`.action-row[data-id="${payload.id}"]`);
+          const row = actionsRoot?.querySelector(`.action-row[data-id="${payload.id}"]`);
           if (row) {
-            const s = payload.status === 'success' ? 'idle' : (payload.status === 'failure' ? 'idle' : 'idle');
-            setRowStatus(row, s);
+            setRowStatus(row, payload.status || 'idle');
             if (payload.tail) showTail(row, payload.tail);
           }
           disableRunningButtons(false);
           break;
         }
+
         case 'action_denied':
         case 'action_error': {
-          // surface a small inline error
-          const row = actionsRoot.querySelector(`.action-row[data-id="${payload.id}"]`);
+          const row = actionsRoot?.querySelector(`.action-row[data-id="${payload.id}"]`);
           if (row) {
             setRowStatus(row, 'idle');
             showTail(row, [payload.reason || payload.message || 'Error occurred.']);
@@ -250,17 +269,112 @@
           disableRunningButtons(false);
           break;
         }
-        default:
-          // ignore unknown JSON types
-          break;
       }
     }
 
-    // initial state for buttons (before connection)
-    updateActionButtons();
+    function attachTerminalInputOnce() {
+      term.onData((data) => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: 'input', data }));
+        }
+      });
+    }
 
-    // close socket on unload
-    window.addEventListener('beforeunload', () => { if (socket) socket.close(); });
+    attachTerminalInputOnce();
+
+    connectBtn.addEventListener('click', function () {
+      if (isConnected || isConnecting) return;
+      if (socket && socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) return;
+
+      const myToken = ++connectionToken;
+      isConnecting = true;
+      setStatus('Connecting');
+      setUiState();
+
+      term.reset();
+      term.writeln('\x1b[2mTETHER by WOLFx\x1b[0m');
+      term.writeln('');
+
+      socket = new WebSocket(wsUrl());
+
+      socket.onopen = function () {
+        if (myToken !== connectionToken) return;
+        isConnecting = false;
+        isConnected = true;
+
+        term.focus();
+        term.writeln('\x1b[32mConnection established.\x1b[0m');
+
+        setStatus('Connected');
+        setUiState();
+
+        requestAnimationFrame(() => {
+          sendResize();
+          updateActionButtons();
+        });
+      };
+
+      socket.onmessage = function (event) {
+        if (myToken !== connectionToken) return;
+
+        try {
+          const payload = JSON.parse(event.data);
+          handleJson(payload);
+          return;
+        } catch (e) {
+          // plain terminal output
+        }
+
+        term.write(event.data);
+      };
+
+      socket.onclose = function () {
+        if (myToken !== connectionToken) return;
+
+        isConnecting = false;
+        isConnected = false;
+
+        setStatus('Disconnected');
+        setUiState();
+        disableRunningButtons(false);
+
+        term.writeln('\r\n\x1b[33mConnection closed.\x1b[0m');
+      };
+
+      socket.onerror = function () {
+        if (myToken !== connectionToken) return;
+
+        isConnecting = false;
+        isConnected = false;
+
+        setStatus('Error');
+        setUiState();
+      };
+    });
+
+    killBtn.addEventListener('click', function () {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'kill' }));
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        sendResize();
+      } else {
+        fitAddon.fit();
+      }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      try {
+        if (socket) socket.close();
+      } catch (e) {}
+    });
+
+    fitAddon.fit();
+    setStatus('Disconnected');
+    setUiState();
   </script>
 </body>
 </html>
